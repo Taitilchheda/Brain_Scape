@@ -1,0 +1,54 @@
+# Brain_Scape — Preprocessing Configuration
+# FSL, ANTs, and preprocessing parameters
+
+skull_strip:
+  method: "fsl_bet"
+  fsl_bet_threshold: 0.5        # 0.0 (keep more) -> 1.0 (aggressive strip)
+  fsl_bet_fractional: false
+  fsl_bet_vertical_gradient: 0.0
+
+motion_correction:
+  enabled: true
+  method: "fsl_mcflirt"
+  reference_volume: "middle"     # "middle", "first", or explicit index
+  cost_function: "normcorr"      # normcorr | mutualinfo | corratio
+  degrees_of_freedom: 6
+
+slice_timing:
+  enabled: true
+  method: "fsl_slicetimer"
+  interleaved: true
+  repetition_time: 2.0           # seconds
+  slice_order: "interleaved"
+
+smoothing:
+  enabled: true
+  method: "gaussian"
+  fwhm_mm: 6.0                  # Full-width half-maximum of Gaussian kernel
+
+denoising:
+  enabled: true
+  method: "nlmeans"              # Non-local means denoising
+  patch_radius: 1
+  search_radius: 3
+
+intensity_normalization:
+  enabled: true
+  method: "zscore"               # zscore | minmax | histogram_matching
+  percentile_clip: [1, 99]        # Clip extreme intensities
+
+registration:
+  method: "ants_syn"             # "ants_syn" | "fsl_fnirt"
+  template: "MNI152_T1_1mm"
+  max_iterations: [100, 70, 50, 20]
+  convergence_threshold: 1e-6
+  fallback_method: "fsl_fnirt"   # Used if ANTs SyN fails
+  atlas_files:
+    mni152: "data/atlases/MNI152_T1_1mm_brain.nii.gz"
+    aal: "data/atlases/AAL3.nii.gz"
+    brodmann: "data/atlases/Brodmann.nii.gz"
+    desikan_killiany: "data/atlases/DKaparc.nii.gz"
+
+output:
+  interpolation: "linear"        # linear | nearest | cubic
+  voxel_size: [1.0, 1.0, 1.0]   # Output voxel dimensions in mm

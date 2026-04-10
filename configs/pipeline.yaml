@@ -1,0 +1,65 @@
+# Brain_Scape — Pipeline Configuration
+# Toggles for each pipeline stage and global settings
+
+pipeline:
+  name: "brainscape-pipeline"
+  version: "1.0.0"
+
+stages:
+  ingestion:
+    enabled: true
+    timeout_seconds: 300
+    max_retries: 2
+
+  preprocessing:
+    enabled: true
+    timeout_seconds: 1200  # 20 min for atlas registration
+    max_retries: 1
+
+  reconstruction:
+    enabled: true
+    timeout_seconds: 600
+    max_retries: 1
+
+  analysis:
+    segmentation:
+      enabled: true
+      timeout_seconds: 900  # 15 min for nnU-Net
+      max_retries: 1
+    classification:
+      enabled: true
+      timeout_seconds: 300
+      max_retries: 2
+    connectivity:
+      enabled: false  # Phase 2
+      requires: ["dti", "fmri"]
+    fusion:
+      enabled: false  # Phase 2
+      requires: ["eeg", "fmri"]
+    longitudinal:
+      enabled: false  # Phase 2
+      requires: ["prior_scan"]
+
+  llm:
+    enabled: true
+    timeout_seconds: 120
+    max_retries: 3
+    circuit_breaker:
+      failure_threshold: 5
+      recovery_timeout_seconds: 300
+
+  compliance:
+    enabled: true
+    phi_scrubbing: true
+    encryption: true
+    audit_logging: true
+
+checkpoint_and_resume:
+  enabled: true
+  storage_path: "data/processed/checkpoints/"
+
+logging:
+  level: "INFO"
+  format: "json"
+  include_job_id: true
+  include_scan_id: true

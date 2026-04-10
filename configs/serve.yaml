@@ -1,0 +1,52 @@
+# Brain_Scape — API Server Configuration
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 2
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst: 10
+
+celery:
+  broker_url: "redis://localhost:6379/0"
+  result_backend: "redis://localhost:6379/1"
+  cpu_worker_concurrency: 4
+  gpu_worker_concurrency: 2
+  task_soft_time_limit: 1800      # 30 min
+  task_time_limit: 3600           # 60 min hard limit
+
+storage:
+  type: "s3"                      # s3 | local
+  s3_endpoint: "http://localhost:9000"
+  s3_access_key: "minioadmin"
+  s3_secret_key: "minioadmin"
+  s3_bucket: "brainscape-scans"
+  s3_region: "us-east-1"
+  local_path: "data/raw"
+  signed_url_expiry_seconds: 3600
+
+mesh:
+  decimation_target: 150000       # Target polygon count for web viewer
+  draco_compression: true
+  export_formats:
+    - "glb"
+    - "obj"
+    - "stl"
+  gif_rotation_frames: 36
+  gif_resolution: [800, 600]
+
+report:
+  pdf_engine: "reportlab"         # reportlab | weasyprint
+  output_path: "outputs/reports/"
+
+health_check:
+  enabled: true
+  check_workers: true
+  check_redis: true
+  check_postgres: true
+  check_s3: true

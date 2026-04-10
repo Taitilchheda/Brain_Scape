@@ -1,0 +1,106 @@
+# Brain_Scape — Compliance Configuration
+# HIPAA / GDPR settings
+
+phi_scrubbing:
+  enabled: true
+  analyzer:
+    language: "en"
+    entities:
+      - "PERSON"
+      - "DATE_OF_BIRTH"
+      - "MEDICAL_RECORD_NUMBER"
+      - "US_SSN"
+      - "EMAIL_ADDRESS"
+      - "PHONE_NUMBER"
+      - "LOCATION"
+      - "ORGANIZATION"
+    deny_list: []                  # Custom deny list entries
+  anonymizer:
+    operator: "replace"            # replace | mask | redact | hash
+    replacements:
+      PERSON: "P-{hash}"
+      DATE_OF_BIRTH: "age_range"
+      MEDICAL_RECORD_NUMBER: "MRN-{uuid}"
+      US_SSN: "[REDACTED]"
+      EMAIL_ADDRESS: "[REDACTED]"
+      PHONE_NUMBER: "[REDACTED]"
+      LOCATION: "[REDACTED]"
+      ORGANIZATION: "[REDACTED]"
+  dicom_tags_to_scrub:
+    - "PatientName"
+    - "PatientID"
+    - "PatientBirthDate"
+    - "PatientAddress"
+    - "ReferringPhysicianName"
+    - "InstitutionName"
+    - "InstitutionAddress"
+    - "AccessionNumber"
+  exif_tags_to_scrub:
+    - "GPS"
+    - "CameraSerialNumber"
+    - "OwnerName"
+
+encryption:
+  at_rest:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    key_management: "env"          # env | vault | aws_kms
+    # For production: use HashiCorp Vault or AWS KMS
+  in_transit:
+    enabled: true
+    protocol: "TLS_1.3"
+    min_tls_version: "1.3"
+
+audit:
+  enabled: true
+  storage: "postgres"              # postgres | cloudtrail | file
+  append_only: true                # No UPDATE or DELETE permissions
+  log_all_access: true             # Log both allowed and denied
+  log_phi_access: true
+  retention_days: 2555             # 7 years (HIPAA requirement)
+
+rbac:
+  enabled: true
+  jwt_algorithm: "RS256"
+  access_token_expire_minutes: 15
+  refresh_token_expire_days: 7
+
+  roles:
+    clinician:
+      endpoints:
+        - "GET /mesh/{scan_id}"
+        - "GET /report/{scan_id}"
+        - "POST /query"
+        - "POST /annotate"
+        - "GET /longitudinal"
+        - "GET /prognosis/{scan_id}"
+        - "GET /export/{scan_id}"
+      access_scope: "own_and_referred"
+
+    researcher:
+      endpoints:
+        - "GET /mesh/{scan_id}"
+        - "GET /report/{scan_id}"
+        - "POST /query"
+        - "GET /longitudinal"
+      access_scope: "anonymized_only"
+
+    patient:
+      endpoints:
+        - "GET /mesh/{scan_id}"
+        - "GET /report/{scan_id}?mode=patient"
+        - "POST /query"
+        - "GET /prognosis/{scan_id}"
+      access_scope: "own_only"
+
+consent:
+  enabled: true
+  require_for_longitudinal: true
+  require_for_research: true
+  storage: "postgres"
+
+data_residency:
+  region: "US"                     # US | EU | APAC
+  enforce_routing: true
+  # EU-resident scans must be processed in EU regions
+  # Jobs tagged region: EU cannot be dequeued by non-EU workers

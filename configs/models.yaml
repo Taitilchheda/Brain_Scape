@@ -1,0 +1,80 @@
+# Brain_Scape — Model Configuration
+# nnU-Net, classifier, ensemble, and confidence parameters
+
+segmentation:
+  model: "nnunetv2"
+  variant: "3d_fullres"           # 3d_fullres | 3d_lowres | 2d
+  dataset_name: "Dataset601_BrainLesion"
+  trainer: "nnUNetTrainer"
+  checkpoint: "checkpoint_best.pth"
+  inference:
+    use_gpu: true
+    batch_size: 1
+    overlap: 0.5                  # Sliding window overlap
+    use_mirroring: true           # Test-time augmentation
+
+classification:
+  damage_levels:
+    - level: 0
+      label: "BLUE"
+      hex: "#4A90D9"
+      semantic: "Not implicated"
+    - level: 1
+      label: "GREEN"
+      hex: "#27AE60"
+      semantic: "No damage detected"
+    - level: 2
+      label: "YELLOW"
+      hex: "#F1C40F"
+      semantic: "Mild abnormality"
+    - level: 3
+      label: "ORANGE"
+      hex: "#E67E22"
+      semantic: "Moderate-to-severe"
+    - level: 4
+      label: "RED"
+      hex: "#E74C3C"
+      semantic: "Severe damage"
+
+  severity_thresholds:
+    # Voxel damage percentage per atlas region -> severity level
+    blue: 0.0
+    green: 0.01
+    yellow: 0.10
+    orange: 0.30
+    red: 0.60
+
+confidence:
+  method: "ensemble"              # ensemble | mc_dropout | bayesian
+  ensemble_size: 5                 # Number of model variants
+  weights:
+    ensemble_agreement: 0.5
+    scan_quality: 0.3
+    registration_accuracy: 0.2
+  thresholds:
+    clinical_filter: 0.7          # Below this, findings flagged for review
+    display_filter: 0.5           # Below this, findings hidden from patient view
+
+differential_diagnosis:
+  enabled: false                   # Phase 2 feature
+  model: "cnn_transformer_hybrid"
+  backbone: "resnet50"
+  pretrained_on: "brats"
+  num_etiologies: 8
+  etiologies:
+    - "stroke"
+    - "hemorrhage"
+    - "tbi"
+    - "tumour"
+    - "ms"
+    - "dementia"
+    - "encephalitis"
+    - "hypoxic_injury"
+
+model_promotion:
+  gate:
+    dice_score_minimum: 0.82
+    ece_maximum: 0.05
+    differential_f1_minimum: 0.75
+  requires_human_review: true
+  requires_ml_admin_jwt: true

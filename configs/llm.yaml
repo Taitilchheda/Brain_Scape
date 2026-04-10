@@ -1,0 +1,72 @@
+# Brain_Scape — LLM & RAG Configuration
+
+llm:
+  provider: "openai"              # openai | anthropic
+  model: "gpt-4"
+  temperature: 0.2
+  max_tokens: 4096
+  top_p: 0.9
+  timeout_seconds: 60
+  max_retries: 3
+
+rag:
+  vector_store: "weaviate"        # weaviate | pinecone
+  weaviate_url: "http://localhost:8080"
+  pinecone_api_key: ""
+  pinecone_environment: ""
+  embedding_model: "pubmedbert"   # pubmedbert | biobert
+  embedding_dimension: 768
+  top_k: 5                        # Number of chunks to retrieve
+  chunk_size: 512                 # Tokens per chunk
+  chunk_overlap: 64                # Overlap between chunks
+  score_threshold: 0.7            # Minimum similarity score
+
+  # Quarterly automated literature refresh
+  literature_sources:
+    - name: "pubmed"
+      enabled: true
+      query: "neuroimaging brain lesion stroke TBI"
+      max_papers: 1000
+    - name: "aha_guidelines"
+      enabled: true
+    - name: "who_guidelines"
+      enabled: true
+    - name: "eso_guidelines"
+      enabled: true
+
+report:
+  # Pass 1: Structured extraction
+  extraction:
+    temperature: 0.1
+    max_tokens: 2048
+
+  # Pass 2a: Clinician report
+  clinician:
+    temperature: 0.2
+    max_tokens: 4096
+    template: "clinician_report"
+    include_citations: true
+    include_confidence_intervals: true
+    include_brodmann_labels: true
+    include_voxel_volumes: true
+
+  # Pass 2b: Patient report (Phase 2)
+  patient:
+    temperature: 0.3
+    max_tokens: 4096
+    template: "patient_report"
+    include_citations: false
+    plain_language: true
+    emotional_framing: true
+
+qa:
+  temperature: 0.3
+  max_tokens: 2048
+  include_scan_context: true
+  include_atlas_labels: true
+
+voice:
+  enabled: false                  # Phase 2 feature
+  model: "whisper-medium"
+  language: "en"
+  device: "cpu"                   # cpu | cuda

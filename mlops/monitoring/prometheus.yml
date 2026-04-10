@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "brainscape-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["brainscape-api:8000"]
+
+  - job_name: "brainscape-worker-cpu"
+    static_configs:
+      - targets: ["brainscape-worker-cpu:8080"]
+
+  - job_name: "brainscape-worker-gpu"
+    static_configs:
+      - targets: ["brainscape-worker-gpu:8080"]
+
+  - job_name: "redis"
+    static_configs:
+      - targets: ["brainscape-redis:6379"]
+
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["brainscape-postgres:5432"]

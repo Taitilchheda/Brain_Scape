@@ -1,0 +1,16 @@
+{
+  "institution_id": "test-hospital",
+  "name": "Test Hospital",
+  "data_residency_region": "us-east-1",
+  "gdpr_enabled": false,
+  "retention_days": 365,
+  "allowed_modalities": [
+    "MRI_T1",
+    "fMRI",
+    "EEG"
+  ],
+  "max_concurrent_jobs": 10,
+  "s3_bucket": "",
+  "audit_log_retention_days": 2555,
+  "dashboard_users": []
+}

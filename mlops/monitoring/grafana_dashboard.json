@@ -1,0 +1,42 @@
+{
+  "dashboard": {
+    "title": "Brain_Scape Clinical Operations",
+    "panels": [
+      {
+        "title": "Pipeline Jobs by Status",
+        "type": "timeseries",
+        "targets": [{"expr": "brainscape_jobs_total{status}"}]
+      },
+      {
+        "title": "Job Duration by Stage",
+        "type": "barchart",
+        "targets": [{"expr": "brainscape_job_duration_seconds{stage}"}]
+      },
+      {
+        "title": "Queue Depth",
+        "type": "stat",
+        "targets": [{"expr": "brainscape_queue_depth{queue_name}"}]
+      },
+      {
+        "title": "GPU Utilization",
+        "type": "gauge",
+        "targets": [{"expr": "brainscape_gpu_utilization_pct{worker_id}"}]
+      },
+      {
+        "title": "Model Confidence Distribution (P50)",
+        "type": "timeseries",
+        "targets": [{"expr": "brainscape_model_confidence_p50{model}"}]
+      },
+      {
+        "title": "LLM API Latency",
+        "type": "timeseries",
+        "targets": [{"expr": "brainscape_llm_latency_seconds{provider}"}]
+      },
+      {
+        "title": "API Request Rate",
+        "type": "timeseries",
+        "targets": [{"expr": "rate(brainscape_api_requests_total{endpoint,status}[5m])"}]
+      }
+    ]
+  }
+}

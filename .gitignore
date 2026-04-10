@@ -1,0 +1,77 @@
+# Brain_Scape — .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+
+# Data directories (never commit scan data)
+data/raw/*
+data/processed/*
+data/registered/*
+data/samples/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/registered/.gitkeep
+!data/samples/.gitkeep
+
+# Atlas files (download separately)
+data/atlases/*
+!data/atlases/.gitkeep
+
+# Model weights
+*.pth
+*.pt
+*.ckpt
+*.h5
+models/
+
+# Outputs
+outputs/
+*.gif
+*.glb
+*.obj
+*.stl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Secrets
+*.pem
+*.key
+credentials.json
