@@ -5,6 +5,7 @@ Exposes all capabilities as REST endpoints with async job tracking.
 No neuroimaging job runs synchronously — all heavy compute is queued.
 """
 
+import asyncio
 import base64
 import csv
 import hashlib
@@ -76,8 +77,10 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 class JobStatus(BaseModel):
     job_id: str
     status: str
+    scan_id: Optional[str] = None
     stage: Optional[str] = None
     progress_pct: Optional[int] = None
+    eta_seconds: Optional[int] = None
     error_message: Optional[str] = None
     created_at: str
     updated_at: str
@@ -140,6 +143,17 @@ class VolumeMeasurementRequest(BaseModel):
 class QAAvailabilityRequest(BaseModel):
     scan_id: str
     question: str
+
+
+class PatientCreateRequest(BaseModel):
+    display_name: str
+    age: int
+    sex: Literal["F", "M", "O"] = "O"
+    modality: str = "MRI_T1"
+    primary_concern: str = "General neuro follow-up"
+    risk_band: Literal["low", "moderate", "high"] = "low"
+    patient_code: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # ── In-Memory Job Store (production would use Postgres) ──
@@ -205,11 +219,13 @@ def _create_job(user_id: str, scan_path: str) -> str:
     job_id = str(uuid4())
     _job_store[job_id] = {
         "job_id": job_id,
+        "scan_id": job_id,
         "user_id": user_id,
         "scan_path": scan_path,
         "status": "queued",
         "stage": "ingestion",
         "progress_pct": 0,
+        "eta_seconds": 20,
         "error_message": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -219,6 +235,27 @@ def _create_job(user_id: str, scan_path: str) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _estimate_eta_seconds(job: dict[str, Any]) -> int:
+    status = str(job.get("status") or "").lower()
+    if status in {"complete", "failed"}:
+        return 0
+
+    progress = max(1, _safe_int(job.get("progress_pct"), 0))
+    created_raw = job.get("created_at")
+    if not created_raw:
+        return max(1, _safe_int(job.get("eta_seconds"), 20))
+
+    try:
+        created_at = datetime.fromisoformat(str(created_raw))
+    except ValueError:
+        return max(1, _safe_int(job.get("eta_seconds"), 20))
+
+    elapsed = max(1.0, (datetime.now(timezone.utc) - created_at).total_seconds())
+    remaining = max(0.0, elapsed * (100.0 - float(progress)) / float(progress))
+    bounded = min(900.0, remaining)
+    return int(round(bounded))
 
 
 def _project_relative(path: Path) -> str:
@@ -616,6 +653,7 @@ def _decorate_analysis_payload(
 
     if "metrics" not in decorated or not isinstance(decorated.get("metrics"), dict):
         decorated["metrics"] = _compute_case_metrics(decorated)
+    decorated["quantitative_metrics"] = _build_quantitative_report_metrics(decorated)
 
     runtime_context = _resolve_runtime_context(scan_id, runtime_overrides)
     runtime_context.setdefault(
@@ -695,9 +733,95 @@ async def health_check():
     }
 
 
+def _finalize_ingest_job_success(job_id: str, analysis: dict[str, Any]) -> None:
+    scan_ref = str(analysis.get("scan_id", job_id))
+    _record_runtime_context(
+        scan_ref,
+        source_kind="uploaded",
+        source_nifti=analysis.get("source_upload") or analysis.get("source_upload_path"),
+        synthetic_fallback=False,
+        analysis_mode=analysis.get("analysis_mode") or "deterministic-upload",
+    )
+    decorated = _decorate_analysis_payload(scan_ref, analysis)
+    _job_store[job_id].update(
+        {
+            "status": "complete",
+            "stage": "done",
+            "progress_pct": 100,
+            "eta_seconds": 0,
+            "provenance_banner": decorated.get("provenance_banner", {}),
+            "safety_profile": decorated.get("safety_profile", {}),
+            "scan_id": scan_ref,
+            "updated_at": _now_iso(),
+        }
+    )
+
+
+async def _run_uploaded_ingest_job(
+    job_id: str,
+    source_path: Path,
+    patient: Optional[dict[str, Any]] = None,
+) -> None:
+    try:
+        _job_store[job_id].update(
+            {
+                "status": "processing",
+                "stage": "preprocessing",
+                "progress_pct": 14,
+                "eta_seconds": 16,
+                "updated_at": _now_iso(),
+            }
+        )
+        await asyncio.sleep(0.35)
+
+        _job_store[job_id].update(
+            {
+                "status": "processing",
+                "stage": "analysis",
+                "progress_pct": 46,
+                "eta_seconds": 11,
+                "updated_at": _now_iso(),
+            }
+        )
+
+        analysis = await asyncio.to_thread(
+            _materialize_uploaded_analysis,
+            job_id,
+            source_path,
+            patient,
+        )
+
+        _job_store[job_id].update(
+            {
+                "status": "processing",
+                "stage": "reconstruction",
+                "progress_pct": 82,
+                "eta_seconds": 4,
+                "updated_at": _now_iso(),
+            }
+        )
+        await asyncio.sleep(0.2)
+
+        _finalize_ingest_job_success(job_id, analysis)
+    except Exception as exc:
+        logger.exception(f"Uploaded scan analysis failed for job {job_id}: {exc}")
+        _job_store[job_id].update(
+            {
+                "status": "failed",
+                "stage": "analysis",
+                "progress_pct": 100,
+                "eta_seconds": 0,
+                "error_message": str(exc),
+                "updated_at": _now_iso(),
+            }
+        )
+
+
 @app.post("/ingest")
 async def ingest_scan(
     file: UploadFile = File(...),
+    async_mode: bool = Query(False),
+    patient_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -727,30 +851,32 @@ async def ingest_scan(
 
     # Create job
     job_id = _create_job(user_id, file_path)
+    patient = _find_demo_patient(patient_id) if patient_id else None
+    if patient_id and not patient:
+        raise HTTPException(status_code=404, detail=f"Unknown patient_id: {patient_id}")
 
-    # Materialize an analysis payload immediately so upload/report/volume flows work end-to-end.
-    try:
-        analysis = _materialize_uploaded_analysis(job_id, Path(file_path))
-        scan_ref = str(analysis.get("scan_id", job_id))
-        _record_runtime_context(
-            job_id,
-            source_kind="uploaded",
-            source_nifti=analysis.get("source_upload") or analysis.get("source_upload_path"),
-            synthetic_fallback=False,
-            analysis_mode=analysis.get("analysis_mode") or "deterministic-upload",
-        )
-        decorated = _decorate_analysis_payload(scan_ref, analysis)
+    if async_mode:
         _job_store[job_id].update(
             {
-                "status": "complete",
-                "stage": "done",
-                "progress_pct": 100,
-                "provenance_banner": decorated.get("provenance_banner", {}),
-                "safety_profile": decorated.get("safety_profile", {}),
-                "scan_id": scan_ref,
+                "status": "processing",
+                "stage": "ingestion",
+                "progress_pct": 5,
+                "eta_seconds": 18,
                 "updated_at": _now_iso(),
             }
         )
+        asyncio.create_task(_run_uploaded_ingest_job(job_id, Path(file_path), patient))
+        return {
+            "job_id": job_id,
+            "scan_id": job_id,
+            "status": _job_store[job_id]["status"],
+            "eta_seconds": _job_store[job_id].get("eta_seconds", 18),
+        }
+
+    # Materialize an analysis payload immediately so upload/report/volume flows work end-to-end.
+    try:
+        analysis = _materialize_uploaded_analysis(job_id, Path(file_path), patient=patient)
+        _finalize_ingest_job_success(job_id, analysis)
     except Exception as exc:
         logger.exception(f"Uploaded scan analysis failed for job {job_id}: {exc}")
         _job_store[job_id].update(
@@ -758,6 +884,7 @@ async def ingest_scan(
                 "status": "failed",
                 "stage": "analysis",
                 "progress_pct": 100,
+                "eta_seconds": 0,
                 "error_message": str(exc),
                 "updated_at": _now_iso(),
             }
@@ -767,7 +894,7 @@ async def ingest_scan(
         "job_id": job_id,
         "scan_id": job_id,
         "status": _job_store[job_id]["status"],
-        "eta_seconds": 5,
+        "eta_seconds": _job_store[job_id].get("eta_seconds", 0),
     }
 
 
@@ -795,6 +922,9 @@ async def get_job_status(
             outcome="DENIED",
         )
         raise HTTPException(status_code=403, detail=reason)
+
+    job["eta_seconds"] = _estimate_eta_seconds(job)
+    job["updated_at"] = _now_iso()
 
     return JobStatus(**job)
 
@@ -861,6 +991,7 @@ async def get_report(
     decorated = _decorate_analysis_payload(scan_id, analysis)
     safety_profile = decorated.get("safety_profile", {})
     finalization_events = list(_REPORT_FINALIZATION_STORE.get(scan_id, []))
+    quantitative_metrics = decorated.get("quantitative_metrics") or _build_quantitative_report_metrics(decorated)
 
     report_mode_notice = "Clinician report draft generated."
     if mode == "patient":
@@ -873,9 +1004,32 @@ async def get_report(
         "pdf_url": f"/outputs/reports/{scan_id}/report_{scan_id}_{mode}.pdf",
         "summary": f"Report for scan {scan_id} in {mode} mode",
         "template": template,
+        "generated_at": _now_iso(),
         "report_mode_notice": report_mode_notice,
         "decision_support_only": safety_profile.get("decision_support_only", False),
         "manual_confirmation_required": safety_profile.get("manual_confirmation_required", False),
+        "quantitative_metrics": quantitative_metrics,
+        "metric_rows": [
+            {"label": "Flagged regions", "value": quantitative_metrics.get("flagged_regions"), "unit": "count"},
+            {"label": "Severe regions", "value": quantitative_metrics.get("severe_regions"), "unit": "count"},
+            {"label": "Flagged lesion volume", "value": quantitative_metrics.get("flagged_volume_mm3"), "unit": "mm3"},
+            {"label": "Severe lesion volume", "value": quantitative_metrics.get("severe_volume_mm3"), "unit": "mm3"},
+            {"label": "Highest region burden", "value": quantitative_metrics.get("highest_region_burden_pct"), "unit": "%"},
+            {"label": "Mean region confidence", "value": quantitative_metrics.get("mean_region_confidence_pct"), "unit": "%"},
+            {"label": "Overall confidence", "value": quantitative_metrics.get("overall_confidence_pct"), "unit": "%"},
+            {"label": "Triage score", "value": quantitative_metrics.get("triage_score"), "unit": "score"},
+        ],
+        "report_sections": {
+            "impression": decorated.get("executive_summary") or "No executive summary available.",
+            "largest_region": {
+                "name": quantitative_metrics.get("largest_region_name"),
+                "volume_mm3": quantitative_metrics.get("largest_region_volume_mm3"),
+            },
+            "risk_statement": (
+                f"Current risk band is {quantitative_metrics.get('risk_band', 'unknown')} "
+                f"with triage score {quantitative_metrics.get('triage_score', 0)}."
+            ),
+        },
         "review_state": decorated.get("review_state"),
         "decision_tier": decorated.get("decision_tier"),
         "provenance_banner": decorated.get("provenance_banner", {}),
@@ -1702,12 +1856,41 @@ def _compute_case_metrics(analysis: dict) -> dict:
     mild_regions = sum(1 for region in regions if (region.get("severity_level", 0) == 2))
     flagged_regions = severe_regions + moderate_regions + mild_regions
     triage_score = round((severe_regions * 3.5) + (moderate_regions * 2.2) + (mild_regions * 1.1) + (analysis.get("overall_confidence", 0.0) * 2.0), 2)
+    flagged_volume_mm3 = round(
+        sum(_safe_float(region.get("volume_mm3"), 0.0) for region in regions if _safe_int(region.get("severity_level"), 0) >= 2),
+        2,
+    )
+    severe_volume_mm3 = round(
+        sum(_safe_float(region.get("volume_mm3"), 0.0) for region in regions if _safe_int(region.get("severity_level"), 0) == 4),
+        2,
+    )
+    mean_region_confidence_pct = round(
+        (
+            sum(_safe_float(region.get("confidence"), 0.0) for region in regions) / max(len(regions), 1)
+        ) * 100.0,
+        2,
+    )
+    highest_region_burden_pct = round(
+        max(
+            [
+                _safe_float(region.get("pct_region") or region.get("volume_pct_of_region"), 0.0)
+                for region in regions
+            ]
+            or [0.0]
+        ),
+        2,
+    )
+
     return {
         "flagged_regions": flagged_regions,
         "severe_regions": severe_regions,
         "moderate_regions": moderate_regions,
         "mild_regions": mild_regions,
         "triage_score": triage_score,
+        "flagged_volume_mm3": flagged_volume_mm3,
+        "severe_volume_mm3": severe_volume_mm3,
+        "mean_region_confidence_pct": mean_region_confidence_pct,
+        "highest_region_burden_pct": highest_region_burden_pct,
     }
 
 
@@ -1719,7 +1902,55 @@ def _derive_risk_band(metrics: dict) -> str:
     return "low"
 
 
-def _build_uploaded_analysis_payload(scan_id: str, source_path: Path) -> dict:
+def _build_quantitative_report_metrics(analysis: dict) -> dict[str, Any]:
+    metrics = dict(analysis.get("metrics") or _compute_case_metrics(analysis))
+    regions = list(analysis.get("damage_summary", []))
+
+    flagged = [r for r in regions if _safe_int(r.get("severity_level"), 0) >= 2]
+    severe = [r for r in regions if _safe_int(r.get("severity_level"), 0) == 4]
+
+    largest_region = max(
+        flagged,
+        key=lambda r: _safe_float(r.get("volume_mm3"), 0.0),
+        default=None,
+    )
+
+    metrics.setdefault("flagged_volume_mm3", round(sum(_safe_float(r.get("volume_mm3"), 0.0) for r in flagged), 2))
+    metrics.setdefault("severe_volume_mm3", round(sum(_safe_float(r.get("volume_mm3"), 0.0) for r in severe), 2))
+    metrics.setdefault(
+        "mean_region_confidence_pct",
+        round((sum(_safe_float(r.get("confidence"), 0.0) for r in regions) / max(len(regions), 1)) * 100.0, 2),
+    )
+    metrics.setdefault(
+        "highest_region_burden_pct",
+        round(max([_safe_float(r.get("pct_region") or r.get("volume_pct_of_region"), 0.0) for r in regions] or [0.0]), 2),
+    )
+
+    return {
+        "risk_band": str(analysis.get("risk_band") or _derive_risk_band(metrics)),
+        "scan_quality": str(analysis.get("scan_quality") or "unknown"),
+        "overall_confidence_pct": round(_safe_float(analysis.get("overall_confidence"), 0.0) * 100.0, 2),
+        "triage_score": round(_safe_float(metrics.get("triage_score"), 0.0), 2),
+        "flagged_regions": _safe_int(metrics.get("flagged_regions"), 0),
+        "severe_regions": _safe_int(metrics.get("severe_regions"), 0),
+        "moderate_regions": _safe_int(metrics.get("moderate_regions"), 0),
+        "mild_regions": _safe_int(metrics.get("mild_regions"), 0),
+        "flagged_volume_mm3": round(_safe_float(metrics.get("flagged_volume_mm3"), 0.0), 2),
+        "severe_volume_mm3": round(_safe_float(metrics.get("severe_volume_mm3"), 0.0), 2),
+        "largest_region_name": largest_region.get("anatomical_name") if largest_region else None,
+        "largest_region_volume_mm3": round(_safe_float((largest_region or {}).get("volume_mm3"), 0.0), 2),
+        "highest_region_burden_pct": round(_safe_float(metrics.get("highest_region_burden_pct"), 0.0), 2),
+        "mean_region_confidence_pct": round(_safe_float(metrics.get("mean_region_confidence_pct"), 0.0), 2),
+        "measured_regions": len(regions),
+        "generated_at": _now_iso(),
+    }
+
+
+def _build_uploaded_analysis_payload(
+    scan_id: str,
+    source_path: Path,
+    patient: Optional[dict[str, Any]] = None,
+) -> dict:
     """Generate a deterministic analysis payload for uploaded scans.
 
     This keeps the upload workflow functional in local/demo mode by creating
@@ -1808,16 +2039,16 @@ def _build_uploaded_analysis_payload(scan_id: str, source_path: Path) -> dict:
 
     analysis = {
         "scan_id": scan_id,
-        "patient_id": f"upload-{scan_id[:8]}",
-        "patient_code": f"UPLOAD-{scan_id[:8].upper()}",
-        "patient_name": "Uploaded Patient",
+        "patient_id": str((patient or {}).get("patient_id") or f"upload-{scan_id[:8]}"),
+        "patient_code": str((patient or {}).get("patient_code") or f"UPLOAD-{scan_id[:8].upper()}"),
+        "patient_name": str((patient or {}).get("display_name") or "Uploaded Patient"),
         "modalities": [modality],
         "atlas": "AAL3",
         "overall_confidence": round(float(confidence), 3),
         "scan_quality": scan_quality,
         "damage_summary": damage_summary,
         "executive_summary": executive_summary,
-        "primary_concern": "Uploaded scan triage",
+        "primary_concern": str((patient or {}).get("primary_concern") or "Uploaded scan triage"),
         "study_date": datetime.now(timezone.utc).date().isoformat(),
         "source_upload": _project_relative(source_path),
         "source_upload_path": str(source_path.resolve()),
@@ -1838,8 +2069,12 @@ def _build_uploaded_analysis_payload(scan_id: str, source_path: Path) -> dict:
     return analysis
 
 
-def _materialize_uploaded_analysis(scan_id: str, source_path: Path) -> dict:
-    analysis = _build_uploaded_analysis_payload(scan_id, source_path)
+def _materialize_uploaded_analysis(
+    scan_id: str,
+    source_path: Path,
+    patient: Optional[dict[str, Any]] = None,
+) -> dict:
+    analysis = _build_uploaded_analysis_payload(scan_id, source_path, patient=patient)
     _SIGNOFF_STORE.pop(scan_id, None)
     _record_runtime_context(
         scan_id,
@@ -1850,6 +2085,7 @@ def _materialize_uploaded_analysis(scan_id: str, source_path: Path) -> dict:
     )
     _UPLOADED_ANALYSES[scan_id] = dict(analysis)
     _write_analysis_payload(scan_id, analysis)
+    _attach_scan_to_patient(patient, analysis)
     return analysis
 
 
@@ -2161,10 +2397,226 @@ for scenario in _DEMO_PATIENT_SCENARIOS:
 
 _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
 _DEFAULT_DEMO_SCAN_ID = _DEMO_PATIENTS[0]["latest_scan_id"]
+_BASE_DEMO_PATIENT_IDS = {str(patient.get("patient_id") or "") for patient in _DEMO_PATIENTS}
+_CUSTOM_PATIENT_STORE_PATH = _PROJECT_DIR / "data" / "processed" / "custom_patients.json"
+_CUSTOM_PATIENTS: list[dict[str, Any]] = []
+
+
+def _normalize_patient_record(raw: dict[str, Any]) -> dict[str, Any]:
+    timeline = list(raw.get("timeline") or [])
+    return {
+        "patient_id": str(raw.get("patient_id") or f"custom-{uuid4().hex[:8]}"),
+        "patient_code": str(raw.get("patient_code") or f"CUST-{uuid4().hex[:6].upper()}"),
+        "display_name": str(raw.get("display_name") or "Custom Patient"),
+        "age": _safe_int(raw.get("age"), 0),
+        "sex": str(raw.get("sex") or "O"),
+        "risk_band": str(raw.get("risk_band") or "low"),
+        "primary_concern": str(raw.get("primary_concern") or "General neuro follow-up"),
+        "latest_scan_id": str(raw.get("latest_scan_id") or ""),
+        "modality": str(raw.get("modality") or "MRI_T1"),
+        "study_date": str(raw.get("study_date") or datetime.now(timezone.utc).date().isoformat()),
+        "trend": str(raw.get("trend") or "baseline"),
+        "overall_confidence": _safe_float(raw.get("overall_confidence"), 0.0),
+        "flagged_regions": _safe_int(raw.get("flagged_regions"), 0),
+        "severe_regions": _safe_int(raw.get("severe_regions"), 0),
+        "triage_score": _safe_float(raw.get("triage_score"), 0.0),
+        "dicom_ready": bool(raw.get("dicom_ready", True)),
+        "dicom_tools": list(raw.get("dicom_tools") or ["MPR", "WL", "Cine", "Measure", "Crosshair"]),
+        "timeline": timeline,
+        "notes": str(raw.get("notes") or ""),
+        "source": str(raw.get("source") or "custom"),
+    }
+
+
+def _persist_custom_patients() -> None:
+    _CUSTOM_PATIENT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_CUSTOM_PATIENT_STORE_PATH, "w", encoding="utf-8") as f:
+        json.dump(_CUSTOM_PATIENTS, f, indent=2)
+
+
+def _load_custom_patients() -> None:
+    if not _CUSTOM_PATIENT_STORE_PATH.exists():
+        return
+
+    try:
+        with open(_CUSTOM_PATIENT_STORE_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as exc:
+        logger.warning(f"Could not load custom patient registry: {exc}")
+        return
+
+    if not isinstance(payload, list):
+        return
+
+    demo_ids = {patient.get("patient_id") for patient in _DEMO_PATIENTS}
+    for record in payload:
+        if not isinstance(record, dict):
+            continue
+        normalized = _normalize_patient_record(record)
+        if normalized["patient_id"] in demo_ids:
+            continue
+        _CUSTOM_PATIENTS.append(normalized)
+        _DEMO_PATIENTS.append(normalized)
+        _DEMO_PATIENT_TIMELINES[normalized["patient_id"]] = list(normalized.get("timeline") or [])
+
+    _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+
+
+def _sync_custom_patient_record(patient: dict[str, Any]) -> None:
+    if str(patient.get("source") or "demo") != "custom":
+        return
+
+    for index, existing in enumerate(_CUSTOM_PATIENTS):
+        if existing.get("patient_id") == patient.get("patient_id"):
+            _CUSTOM_PATIENTS[index] = dict(patient)
+            _persist_custom_patients()
+            return
+
+    _CUSTOM_PATIENTS.append(dict(patient))
+    _persist_custom_patients()
+
+
+def _recover_patients_from_saved_analyses() -> None:
+    analysis_root = _OUTPUTS_DIR / "analysis"
+    if not analysis_root.exists():
+        return
+
+    known_ids = {str(patient.get("patient_id") or "") for patient in _DEMO_PATIENTS}
+    recovered_by_patient: dict[str, dict[str, Any]] = {}
+    recovered_timeline: dict[str, list[dict[str, Any]]] = {}
+
+    for analysis_dir in analysis_root.iterdir():
+        analysis_file = analysis_dir / "analysis.json"
+        if not analysis_file.exists():
+            continue
+
+        try:
+            with open(analysis_file, "r", encoding="utf-8") as f:
+                analysis = json.load(f)
+        except Exception:
+            continue
+
+        if not isinstance(analysis, dict):
+            continue
+
+        patient_id = str(analysis.get("patient_id") or "")
+        if not patient_id or patient_id in known_ids:
+            continue
+
+        scan_id = str(analysis.get("scan_id") or "")
+        if not scan_id:
+            continue
+
+        metrics = analysis.get("metrics") or _compute_case_metrics(analysis)
+        study_date = str(analysis.get("study_date") or _now_iso()[:10])
+        modality = str((analysis.get("modalities") or ["MRI_T1"])[0])
+
+        existing = recovered_by_patient.get(patient_id)
+        candidate = {
+            "patient_id": patient_id,
+            "patient_code": str(analysis.get("patient_code") or f"UPLOAD-{patient_id[-8:].upper()}"),
+            "display_name": str(analysis.get("patient_name") or "Recovered Uploaded Patient"),
+            "age": 0,
+            "sex": "O",
+            "risk_band": str(analysis.get("risk_band") or _derive_risk_band(metrics)),
+            "primary_concern": str(analysis.get("primary_concern") or "Recovered uploaded scan"),
+            "latest_scan_id": scan_id,
+            "modality": modality,
+            "study_date": study_date,
+            "trend": str(analysis.get("trend") or "historical"),
+            "overall_confidence": _safe_float(analysis.get("overall_confidence"), 0.0),
+            "flagged_regions": _safe_int(metrics.get("flagged_regions"), 0),
+            "severe_regions": _safe_int(metrics.get("severe_regions"), 0),
+            "triage_score": _safe_float(metrics.get("triage_score"), 0.0),
+            "timeline": [],
+            "notes": "Recovered from saved analysis artifacts.",
+            "source": "recovered",
+        }
+
+        if not existing or study_date >= str(existing.get("study_date") or ""):
+            recovered_by_patient[patient_id] = candidate
+
+        timeline_item = {
+            "scan_id": scan_id,
+            "study_date": study_date,
+            "risk_band": candidate["risk_band"],
+            "modality": modality,
+            "overall_confidence": candidate["overall_confidence"],
+            "metrics": metrics,
+            "analysis": analysis,
+        }
+        recovered_timeline.setdefault(patient_id, []).append(timeline_item)
+
+    for patient_id, record in recovered_by_patient.items():
+        normalized = _normalize_patient_record(record)
+        _DEMO_PATIENTS.append(normalized)
+        history = recovered_timeline.get(patient_id, [])
+        history.sort(key=lambda item: str(item.get("study_date") or ""), reverse=True)
+        _DEMO_PATIENT_TIMELINES[patient_id] = [
+            item.get("analysis", {}) for item in history if isinstance(item.get("analysis"), dict)
+        ]
+
+    if recovered_by_patient:
+        _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+
+
+def _attach_scan_to_patient(patient: Optional[dict[str, Any]], analysis: dict[str, Any]) -> None:
+    if not patient:
+        return
+
+    metrics = analysis.get("metrics") or _compute_case_metrics(analysis)
+    timeline_entry = {
+        "scan_id": analysis.get("scan_id"),
+        "study_date": analysis.get("study_date"),
+        "risk_band": analysis.get("risk_band"),
+        "modality": (analysis.get("modalities") or [patient.get("modality") or "MRI_T1"])[0],
+        "overall_confidence": analysis.get("overall_confidence"),
+        "metrics": metrics,
+    }
+
+    history = [entry for entry in list(patient.get("timeline") or []) if entry.get("scan_id") != timeline_entry["scan_id"]]
+    patient["timeline"] = [timeline_entry] + history
+    patient["latest_scan_id"] = str(analysis.get("scan_id") or patient.get("latest_scan_id") or "")
+    patient["study_date"] = str(analysis.get("study_date") or patient.get("study_date") or _now_iso()[:10])
+    patient["risk_band"] = str(analysis.get("risk_band") or patient.get("risk_band") or "low")
+    patient["modality"] = (analysis.get("modalities") or [patient.get("modality") or "MRI_T1"])[0]
+    patient["overall_confidence"] = _safe_float(analysis.get("overall_confidence"), patient.get("overall_confidence", 0.0))
+    patient["flagged_regions"] = _safe_int(metrics.get("flagged_regions"), patient.get("flagged_regions", 0))
+    patient["severe_regions"] = _safe_int(metrics.get("severe_regions"), patient.get("severe_regions", 0))
+    patient["triage_score"] = _safe_float(metrics.get("triage_score"), patient.get("triage_score", 0.0))
+
+    patient_id = str(patient.get("patient_id") or "")
+    if patient_id:
+        _DEMO_PATIENT_TIMELINES[patient_id] = [
+            dict(analysis),
+            *[entry for entry in _DEMO_PATIENT_TIMELINES.get(patient_id, []) if entry.get("scan_id") != analysis.get("scan_id")],
+        ]
+
+    _DEMO_PATIENTS.sort(key=lambda record: record.get("triage_score", 0), reverse=True)
+    _sync_custom_patient_record(patient)
+
+
+_load_custom_patients()
+_recover_patients_from_saved_analyses()
 
 
 def _find_demo_patient(patient_id: str) -> Optional[dict]:
     return next((patient for patient in _DEMO_PATIENTS if patient["patient_id"] == patient_id), None)
+
+
+def _find_base_demo_patient(patient_id: str) -> Optional[dict]:
+    if patient_id not in _BASE_DEMO_PATIENT_IDS:
+        return None
+    return _find_demo_patient(patient_id)
+
+
+def _list_base_demo_patients() -> list[dict]:
+    patients = [
+        patient for patient in _DEMO_PATIENTS
+        if str(patient.get("patient_id") or "") in _BASE_DEMO_PATIENT_IDS
+    ]
+    patients.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+    return patients
 
 
 def _resolve_demo_scan_id(scan_id: Optional[str], patient_id: Optional[str]) -> str:
@@ -2175,10 +2627,13 @@ def _resolve_demo_scan_id(scan_id: Optional[str], patient_id: Optional[str]) -> 
         return scan_id
 
     if patient_id:
-        patient = _find_demo_patient(patient_id)
+        patient = _find_base_demo_patient(patient_id)
         if not patient:
             raise HTTPException(status_code=404, detail=f"Unknown demo patient_id: {patient_id}")
-        return patient["latest_scan_id"]
+        candidate = str(patient.get("latest_scan_id") or "")
+        if candidate in _DEMO_ANALYSES:
+            return candidate
+        return _DEFAULT_DEMO_SCAN_ID
 
     return _DEFAULT_DEMO_SCAN_ID
 
@@ -2424,16 +2879,19 @@ def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tu
 
 def _build_volume_payload(
     scan_id: str,
-    source_path: Path,
+    source_path: Optional[Path],
     analysis: dict,
     resolution: str = "standard",
 ) -> dict:
     target_shape = _volume_target_shape(resolution)
-    stat = source_path.stat()
-    cache_key = (
-        f"{scan_id}:{int(stat.st_mtime)}:{int(stat.st_size)}"
-        f":{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
-    )
+    if source_path and source_path.exists():
+        stat = source_path.stat()
+        cache_key = (
+            f"{scan_id}:{int(stat.st_mtime)}:{int(stat.st_size)}"
+            f":{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+        )
+    else:
+        cache_key = f"{scan_id}:synthetic:{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
 
     cached_payload = _VOLUME_PAYLOAD_CACHE.get(cache_key)
     if cached_payload:
@@ -2441,27 +2899,37 @@ def _build_volume_payload(
         payload["cached"] = True
         return payload
 
-    try:
-        source_rel = str(source_path.resolve().relative_to(_PROJECT_DIR)).replace("\\", "/")
-    except ValueError:
-        source_rel = str(source_path)
-
     synthetic_fallback = False
-    try:
-        rgba_bytes, shape, spacing_mm, modality = _prepare_volume_channels(
-            source_path,
-            analysis,
-            target_shape=target_shape,
-        )
-    except Exception as exc:
-        logger.warning(
-            f"Volume reconstruction fallback for {scan_id} ({source_path}): {exc}"
-        )
+    source_rel = "synthetic://analysis-fallback"
+
+    if source_path and source_path.exists():
+        try:
+            source_rel = str(source_path.resolve().relative_to(_PROJECT_DIR)).replace("\\", "/")
+        except ValueError:
+            source_rel = str(source_path)
+
+        try:
+            rgba_bytes, shape, spacing_mm, modality = _prepare_volume_channels(
+                source_path,
+                analysis,
+                target_shape=target_shape,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Volume reconstruction fallback for {scan_id} ({source_path}): {exc}"
+            )
+            rgba_bytes, shape, spacing_mm, modality = _build_synthetic_volume_channels(
+                analysis,
+                target_shape=target_shape,
+            )
+            source_rel = "synthetic://analysis-fallback"
+            synthetic_fallback = True
+    else:
+        logger.warning(f"No source NIfTI found for {scan_id}; using synthetic volume fallback")
         rgba_bytes, shape, spacing_mm, modality = _build_synthetic_volume_channels(
             analysis,
             target_shape=target_shape,
         )
-        source_rel = "synthetic://analysis-fallback"
         synthetic_fallback = True
 
     encoded = base64.b64encode(rgba_bytes).decode("ascii")
@@ -2647,13 +3115,110 @@ def _ensure_scan_mesh(
 @app.get("/demo/patients")
 async def get_demo_patients():
     """List sample patients available for demo workflows."""
+    return {"patients": _list_base_demo_patients()}
+
+
+@app.get("/patients")
+async def list_patients(current_user: dict = Depends(get_current_user)):
+    """Return all known patients (demo + custom) for frontend worklist rendering."""
+    audit.log(
+        user_id=current_user.get("sub", ""),
+        role=current_user.get("role", ""),
+        action="GET /patients",
+        outcome="ALLOWED",
+    )
     return {"patients": _DEMO_PATIENTS}
+
+
+@app.post("/patients")
+async def create_patient(
+    request: PatientCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a new patient record and persist it for subsequent sessions."""
+    patient_id = f"custom-{uuid4().hex[:10]}"
+    patient_code = request.patient_code or f"CUST-{uuid4().hex[:6].upper()}"
+
+    patient_record = _normalize_patient_record(
+        {
+            "patient_id": patient_id,
+            "patient_code": patient_code,
+            "display_name": request.display_name,
+            "age": request.age,
+            "sex": request.sex,
+            "risk_band": request.risk_band,
+            "primary_concern": request.primary_concern,
+            "latest_scan_id": _DEFAULT_DEMO_SCAN_ID,
+            "modality": request.modality,
+            "study_date": datetime.now(timezone.utc).date().isoformat(),
+            "trend": "baseline",
+            "overall_confidence": 0.0,
+            "flagged_regions": 0,
+            "severe_regions": 0,
+            "triage_score": 0.0,
+            "timeline": [],
+            "notes": request.notes or "",
+            "source": "custom",
+        }
+    )
+
+    _DEMO_PATIENTS.append(patient_record)
+    _DEMO_PATIENT_TIMELINES[patient_id] = []
+    _sync_custom_patient_record(patient_record)
+    _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+
+    audit.log(
+        user_id=current_user.get("sub", ""),
+        role=current_user.get("role", ""),
+        action="POST /patients",
+        resource_id=patient_id,
+        outcome="ALLOWED",
+        details={
+            "patient_code": patient_code,
+            "modality": request.modality,
+            "risk_band": request.risk_band,
+        },
+    )
+
+    return {
+        "patient": patient_record,
+        "saved": True,
+    }
+
+
+@app.get("/patients/{patient_id}")
+async def get_patient_record(
+    patient_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return one patient record with latest analysis and timeline context."""
+    patient = _find_demo_patient(patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail=f"Unknown patient_id: {patient_id}")
+
+    latest_scan_id = str(patient.get("latest_scan_id") or "")
+    analysis = _DEMO_ANALYSES.get(latest_scan_id) or _UPLOADED_ANALYSES.get(latest_scan_id)
+    decorated = _decorate_analysis_payload(latest_scan_id, analysis) if latest_scan_id and analysis else None
+
+    audit.log(
+        user_id=current_user.get("sub", ""),
+        role=current_user.get("role", ""),
+        action=f"GET /patients/{patient_id}",
+        resource_id=patient_id,
+        outcome="ALLOWED",
+    )
+
+    return {
+        "patient": patient,
+        "analysis": decorated,
+        "timeline": _DEMO_PATIENT_TIMELINES.get(patient_id, []),
+    }
 
 
 @app.get("/demo/patients/{patient_id}")
 async def get_demo_patient(patient_id: str):
     """Get one sample patient and their latest analysis."""
-    patient = _find_demo_patient(patient_id)
+    patient = _find_base_demo_patient(patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Unknown demo patient_id: {patient_id}")
     analysis = _DEMO_ANALYSES.get(patient["latest_scan_id"])
@@ -2668,7 +3233,7 @@ async def get_demo_patient(patient_id: str):
 @app.get("/demo/patients/{patient_id}/timeline")
 async def get_demo_patient_timeline(patient_id: str):
     """Get longitudinal sample timeline for one patient."""
-    patient = _find_demo_patient(patient_id)
+    patient = _find_base_demo_patient(patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Unknown demo patient_id: {patient_id}")
     return {
@@ -2796,10 +3361,11 @@ async def get_volume_payload(
     """Return volumetric RGBA payload (intensity, gray, white, damage) for WebGL rendering."""
     analysis = _resolve_analysis_payload(scan_id)
 
+    source_path: Optional[Path] = None
     try:
         source_path = _resolve_scan_volume_path(scan_id, analysis)
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        logger.warning(f"Volume source missing for {scan_id}: {exc}")
 
     try:
         volume_payload = _build_volume_payload(scan_id, source_path, analysis, resolution=resolution)
@@ -2851,7 +3417,11 @@ async def get_advanced_volume_reconstruction(
     decorated = _decorate_analysis_payload(scan_id, analysis)
 
     try:
-        source_path = _resolve_scan_volume_path(scan_id, analysis)
+        source_path: Optional[Path] = None
+        try:
+            source_path = _resolve_scan_volume_path(scan_id, analysis)
+        except FileNotFoundError as exc:
+            logger.warning(f"Advanced volume source missing for {scan_id}: {exc}")
         volume_payload = _build_volume_payload(scan_id, source_path, analysis, resolution=resolution)
     except Exception as exc:
         logger.exception(f"Advanced volumetric reconstruction failed for {scan_id}: {exc}")

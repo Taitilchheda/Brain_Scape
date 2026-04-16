@@ -13,6 +13,7 @@
         let authToken = localStorage.getItem("brainscape_token") || "";
         let currentScanId = null;
         let analysisData = null;
+        let latestReportPayload = null;
         let demoPatients = [];
         let selectedPatientId = "";
         let compareTargetPatientId = "";
@@ -159,6 +160,13 @@
                 entry: null,
                 target: null,
                 visual: null,
+            },
+            viewerTools: {
+                mode: "",
+                measureStart: null,
+                measureVisual: null,
+                bookmarks: [],
+                bookmarkMarkers: [],
             },
         };
 
@@ -507,6 +515,180 @@
             }
         }
 
+        function updateViewerToolOutput(message) {
+            const output = document.getElementById("viewer-tool-output");
+            if (!output) return;
+            output.textContent = message;
+        }
+
+        function clearViewerMeasurementVisual() {
+            const visual = clinicalState.viewerTools.measureVisual;
+            if (!visual || !scene) return;
+            scene.remove(visual);
+            visual.traverse((child) => {
+                if (child.geometry?.dispose) child.geometry.dispose();
+                if (child.material?.dispose) child.material.dispose();
+            });
+            clinicalState.viewerTools.measureVisual = null;
+        }
+
+        function renderViewerBookmarks() {
+            const container = document.getElementById("viewer-bookmarks");
+            if (!container) return;
+
+            const entries = clinicalState.viewerTools.bookmarks;
+            if (!entries.length) {
+                container.innerHTML = "<div class='region-item muted'>No lesion bookmarks yet.</div>";
+                return;
+            }
+
+            container.innerHTML = entries.slice(-8).reverse().map((item) => {
+                return [
+                    "<div class='region-item'>",
+                    `<strong>${item.regionName}</strong> ${item.severity}${item.confidence > 0 ? ` | ${item.confidence}%` : ""}<br>`,
+                    `Point: (${item.point.x.toFixed(2)}, ${item.point.y.toFixed(2)}, ${item.point.z.toFixed(2)})<br>`,
+                    `Approx mm: (${item.mm.x.toFixed(1)}, ${item.mm.y.toFixed(1)}, ${item.mm.z.toFixed(1)})<br>`,
+                    `<span style='color:#6580a2;'>${item.createdAt}</span>`,
+                    "</div>",
+                ].join("");
+            }).join("");
+        }
+
+        function clearViewerBookmarks(silent = false) {
+            if (scene) {
+                clinicalState.viewerTools.bookmarkMarkers.forEach((marker) => {
+                    scene.remove(marker);
+                    if (marker.geometry?.dispose) marker.geometry.dispose();
+                    if (marker.material?.dispose) marker.material.dispose();
+                });
+            }
+            clinicalState.viewerTools.bookmarkMarkers = [];
+            clinicalState.viewerTools.bookmarks = [];
+            renderViewerBookmarks();
+            if (!silent) {
+                updateViewerToolOutput("All lesion bookmarks cleared.");
+            }
+        }
+
+        function updateViewerToolButtons() {
+            const mode = clinicalState.viewerTools.mode;
+            const measure = document.getElementById("btn-3d-measure");
+            const bookmark = document.getElementById("btn-3d-bookmark");
+            if (measure) measure.classList.toggle("active", mode === "measure");
+            if (bookmark) bookmark.classList.toggle("active", mode === "bookmark");
+        }
+
+        function setViewerToolMode(mode) {
+            const nextMode = clinicalState.viewerTools.mode === mode ? "" : mode;
+            clinicalState.viewerTools.mode = nextMode;
+            clinicalState.viewerTools.measureStart = null;
+
+            if (clinicalState.trajectory.activeMode) {
+                clinicalState.trajectory.activeMode = "";
+                updateTrajectoryButtons();
+            }
+
+            updateViewerToolButtons();
+            if (nextMode === "measure") {
+                updateViewerToolOutput("3D Measure active: click two cortical points to compute physical distance.");
+            } else if (nextMode === "bookmark") {
+                updateViewerToolOutput("Lesion Bookmark active: click affected regions to pin and track lesion checkpoints.");
+            } else {
+                updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
+            }
+        }
+
+        function pointToApproxMm(point) {
+            if (activeDicomVolume) {
+                return pointNormalizedToMm(point);
+            }
+            return {
+                x: point.x * 100.0,
+                y: point.y * 100.0,
+                z: point.z * 100.0,
+            };
+        }
+
+        function handleViewerMeasurementClick(point, region) {
+            const start = clinicalState.viewerTools.measureStart;
+            if (!start) {
+                clinicalState.viewerTools.measureStart = { x: point.x, y: point.y, z: point.z };
+                updateViewerToolOutput("Measurement start captured. Click a second point to compute distance.");
+                return;
+            }
+
+            const startMm = pointToApproxMm(start);
+            const endMm = pointToApproxMm(point);
+            const dx = endMm.x - startMm.x;
+            const dy = endMm.y - startMm.y;
+            const dz = endMm.z - startMm.z;
+            const distanceMm = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
+
+            clearViewerMeasurementVisual();
+            const group = new THREE.Group();
+            const points = [
+                new THREE.Vector3(start.x, start.y, start.z),
+                new THREE.Vector3(point.x, point.y, point.z),
+            ];
+            const line = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(points),
+                new THREE.LineBasicMaterial({ color: 0x0f8a68 })
+            );
+            group.add(line);
+
+            const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x14a97a, emissive: 0x0b7452, emissiveIntensity: 0.2 });
+            const markerA = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), markerMaterial.clone());
+            markerA.position.set(start.x, start.y, start.z);
+            const markerB = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), markerMaterial.clone());
+            markerB.position.set(point.x, point.y, point.z);
+            group.add(markerA);
+            group.add(markerB);
+
+            if (scene) scene.add(group);
+            clinicalState.viewerTools.measureVisual = group;
+            clinicalState.viewerTools.measureStart = null;
+
+            const regionName = region?.anatomical_name || region?.atlas_id || "Selected target";
+            updateViewerToolOutput(`3D distance: ${distanceMm.toFixed(1)} mm. Endpoint region: ${regionName}.`);
+        }
+
+        function handleViewerBookmarkClick(point, region) {
+            const mm = pointToApproxMm(point);
+            const regionName = region?.anatomical_name || region?.atlas_id || "Unmapped region";
+            const severity = SEVERITY_LABELS[region?.severity_level || 1] || "Healthy";
+            const confidence = Math.round((region?.confidence || 0) * 100);
+
+            const marker = new THREE.Mesh(
+                new THREE.SphereGeometry(0.024, 14, 14),
+                new THREE.MeshStandardMaterial({ color: 0x9f3bce, emissive: 0x6b2991, emissiveIntensity: 0.25 })
+            );
+            marker.position.set(point.x, point.y, point.z);
+            if (scene) scene.add(marker);
+            clinicalState.viewerTools.bookmarkMarkers.push(marker);
+
+            clinicalState.viewerTools.bookmarks.push({
+                point: { x: point.x, y: point.y, z: point.z },
+                mm,
+                regionName,
+                severity,
+                confidence,
+                createdAt: new Date().toLocaleString(),
+            });
+
+            if (clinicalState.viewerTools.bookmarks.length > 20) {
+                clinicalState.viewerTools.bookmarks.shift();
+                const staleMarker = clinicalState.viewerTools.bookmarkMarkers.shift();
+                if (staleMarker && scene) {
+                    scene.remove(staleMarker);
+                    if (staleMarker.geometry?.dispose) staleMarker.geometry.dispose();
+                    if (staleMarker.material?.dispose) staleMarker.material.dispose();
+                }
+            }
+
+            renderViewerBookmarks();
+            updateViewerToolOutput(`Bookmarked ${regionName} (${severity}) at approx (${mm.x.toFixed(1)}, ${mm.y.toFixed(1)}, ${mm.z.toFixed(1)}) mm.`);
+        }
+
         function updateViewerPickInfo(message) {
             const info = document.getElementById("viewer-pick-info");
             if (!info) return;
@@ -584,11 +766,24 @@
                 params.set("resolution", resolution);
             }
             const query = params.toString() ? `?${params.toString()}` : "";
-            const response = await fetch(`${API_BASE}/volume/${encodeURIComponent(scanId)}${query}`);
-            if (!response.ok) {
-                throw new Error(`Volume endpoint failed (${response.status})`);
+            const direct = await fetch(`${API_BASE}/volume/${encodeURIComponent(scanId)}${query}`, {
+                headers: authToken ? authHeaders() : {},
+            });
+            if (direct.ok) {
+                return direct.json();
             }
-            return response.json();
+
+            const advanced = await fetch(`${API_BASE}/reconstruction/volume/${encodeURIComponent(scanId)}${query}`, {
+                headers: authToken ? authHeaders() : {},
+            });
+            if (!advanced.ok) {
+                throw new Error(`Volume endpoint failed (${direct.status}/${advanced.status})`);
+            }
+            const payload = await advanced.json();
+            if (!payload?.volume) {
+                throw new Error("Advanced reconstruction response did not include a volume payload");
+            }
+            return payload.volume;
         }
 
         function computeDamageVisibilityFactor() {
@@ -911,6 +1106,11 @@
 
         function setTrajectoryCaptureMode(mode) {
             clinicalState.trajectory.activeMode = mode;
+            if (clinicalState.viewerTools.mode) {
+                clinicalState.viewerTools.mode = "";
+                clinicalState.viewerTools.measureStart = null;
+                updateViewerToolButtons();
+            }
             updateTrajectoryButtons();
             if (mode === "entry") {
                 updateTrajectoryOutput("Trajectory mode: click in the 3D viewer to set entry point.");
@@ -1078,6 +1278,13 @@
 
             const regions = normalizeRegions(analysisData);
             const region = inferRegionFromPoint(regions, hit.point.x, hit.point.y, hit.point.z);
+
+            if (clinicalState.viewerTools.mode === "measure") {
+                handleViewerMeasurementClick(hit.point, region);
+            } else if (clinicalState.viewerTools.mode === "bookmark") {
+                handleViewerBookmarkClick(hit.point, region);
+            }
+
             const regionName = region?.anatomical_name || region?.atlas_id || "No mapped region";
             const severity = SEVERITY_LABELS[region?.severity_level || 1] || "Healthy";
             const confidence = Math.round((region?.confidence || 0.0) * 100);
@@ -1477,6 +1684,29 @@
         function updateStatus(text) {
             const status = document.getElementById("status-text");
             if (status) status.textContent = text;
+        }
+
+        function formatEta(seconds) {
+            const value = Number(seconds);
+            if (!Number.isFinite(value) || value <= 0) return "ETA <1s";
+            if (value < 60) return `ETA ${Math.round(value)}s`;
+            const mins = Math.floor(value / 60);
+            const secs = Math.round(value % 60);
+            return `ETA ${mins}m ${secs}s`;
+        }
+
+        function setLoaderState({ active = false, progress = 0, stage = "waiting", etaSeconds = null } = {}) {
+            const panel = document.getElementById("loader-panel");
+            const bar = document.getElementById("loader-progress");
+            const stageEl = document.getElementById("loader-stage");
+            const etaEl = document.getElementById("loader-eta");
+            if (!panel || !bar || !stageEl || !etaEl) return;
+
+            panel.classList.toggle("active", Boolean(active));
+            const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+            bar.style.width = `${pct}%`;
+            stageEl.textContent = `Stage: ${String(stage || "waiting")}`;
+            etaEl.textContent = Number.isFinite(Number(etaSeconds)) ? formatEta(etaSeconds) : "ETA --";
         }
 
         function updateJobInfo(text) {
@@ -3977,10 +4207,13 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/demo/patients`);
+                let response = await fetch(`${API_BASE}/patients`, {
+                    headers: authToken ? authHeaders() : {},
+                });
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    response = await fetch(`${API_BASE}/demo/patients`);
                 }
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                 const payload = await response.json();
                 demoPatients = Array.isArray(payload.patients) ? payload.patients : [];
@@ -4005,6 +4238,85 @@
                 updateClinicalKpis();
                 renderGovernancePanel(null);
                 updateClinicalWorkflow();
+            }
+        }
+
+        async function createPatientFromForm() {
+            if (!authToken) {
+                updateStatus("Sign in before creating a patient record.");
+                return;
+            }
+
+            const nameInput = document.getElementById("new-patient-name");
+            const ageInput = document.getElementById("new-patient-age");
+            const sexInput = document.getElementById("new-patient-sex");
+            const modalityInput = document.getElementById("new-patient-modality");
+            const concernInput = document.getElementById("new-patient-concern");
+            const createButton = document.getElementById("btn-create-patient");
+            if (!nameInput || !ageInput || !sexInput || !modalityInput || !concernInput || !createButton) {
+                return;
+            }
+
+            const displayName = nameInput.value.trim();
+            const ageValue = Number(ageInput.value);
+            const riskFilter = (document.getElementById("patient-risk-filter")?.value || "moderate").toLowerCase();
+            const riskBand = riskFilter === "all" ? "moderate" : riskFilter;
+            if (!displayName) {
+                updateStatus("Enter the patient name before creating the record.");
+                return;
+            }
+            if (!Number.isFinite(ageValue) || ageValue < 0 || ageValue > 120) {
+                updateStatus("Enter a valid age between 0 and 120.");
+                return;
+            }
+
+            createButton.disabled = true;
+            createButton.textContent = "Creating...";
+
+            try {
+                const response = await fetch(`${API_BASE}/patients`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...authHeaders() },
+                    body: JSON.stringify({
+                        display_name: displayName,
+                        age: Math.round(ageValue),
+                        sex: sexInput.value || "F",
+                        modality: modalityInput.value || "MRI_T1",
+                        risk_band: riskBand,
+                        primary_concern: concernInput.value.trim() || "general_neurology",
+                    }),
+                });
+
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.detail || `Patient creation failed (${response.status})`);
+                }
+
+                if (payload?.patient?.patient_id) {
+                    const patient = payload.patient;
+                    const existingIndex = demoPatients.findIndex((item) => item.patient_id === patient.patient_id);
+                    if (existingIndex >= 0) {
+                        demoPatients[existingIndex] = patient;
+                    } else {
+                        demoPatients.push(patient);
+                    }
+                    demoPatients.sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
+                    selectedPatientId = patient.patient_id;
+                    renderPatientList();
+                    renderComparePatientOptions();
+                    updateCaseSnapshot(null, getSelectedPatient());
+                    updateActivePatientBadge(getSelectedPatient(), false);
+                    updateClinicalKpis(null, getSelectedPatient());
+                    updateClinicalWorkflow();
+                }
+
+                concernInput.value = "";
+                updateStatus(`Patient record created for ${displayName}.`);
+            } catch (error) {
+                updateStatus(`Could not create patient record: ${error.message}`);
+            } finally {
+                createButton.disabled = false;
+                createButton.textContent = "Create Patient";
             }
         }
 
@@ -4087,6 +4399,7 @@
                 localStorage.setItem("brainscape_token", authToken);
                 setAuthState(`Signed in as ${role}`, "ok");
                 updateStatus(`Authenticated as ${role}. Upload a scan or load demo data.`);
+                fetchDemoPatients();
             } catch (error) {
                 setAuthState("Authentication failed", "error");
                 updateStatus("Could not authenticate. Please retry.");
@@ -4113,6 +4426,150 @@
             updateClinicalWorkflow();
         }
 
+        function toMetricRows(payload) {
+            const rows = Array.isArray(payload?.metric_rows) ? payload.metric_rows : [];
+            if (rows.length > 0) {
+                return rows;
+            }
+
+            const metrics = payload?.quantitative_metrics || payload?.analysis?.quantitative_metrics || {};
+            const labels = {
+                flagged_volume_mm3: "Flagged tissue volume",
+                severe_volume_mm3: "Severe tissue volume",
+                mean_region_confidence_pct: "Mean confidence",
+                highest_region_burden_pct: "Highest regional burden",
+                severe_region_count: "Severe region count",
+                elevated_region_count: "Elevated region count",
+                affected_region_count: "Affected region count",
+            };
+
+            return Object.entries(metrics).map(([key, value]) => ({
+                label: labels[key] || key.replace(/_/g, " "),
+                value,
+                unit: key.endsWith("_pct") ? "%" : (key.endsWith("_mm3") ? "mm^3" : ""),
+            }));
+        }
+
+        function formatMetricDisplay(value, unit = "") {
+            if (value === null || value === undefined || Number.isNaN(Number(value))) {
+                return "n/a";
+            }
+            const numeric = Number(value);
+            const hasNumeric = Number.isFinite(numeric);
+            if (!hasNumeric) {
+                return `${value}${unit ? ` ${unit}` : ""}`;
+            }
+
+            const rounded = Math.abs(numeric) >= 100 ? Math.round(numeric) : Number(numeric.toFixed(2));
+            if (unit === "%") {
+                return `${rounded}%`;
+            }
+            if (unit) {
+                return `${rounded} ${unit}`;
+            }
+            return `${rounded}`;
+        }
+
+        function renderDetailedReportPanel(payload) {
+            const grid = document.getElementById("report-metrics-grid");
+            const narrative = document.getElementById("report-narrative");
+            if (!grid || !narrative) return;
+
+            if (!payload) {
+                grid.innerHTML = "<div class='region-item muted'>Load a scan to generate quantitative report metrics.</div>";
+                narrative.textContent = "Detailed clinical narrative appears after report generation.";
+                return;
+            }
+
+            const rows = toMetricRows(payload).slice(0, 12);
+            if (rows.length === 0) {
+                grid.innerHTML = "<div class='region-item muted'>No quantitative metrics were returned for this scan.</div>";
+            } else {
+                grid.innerHTML = rows.map((row) => {
+                    return [
+                        "<div class='report-metric'>",
+                        `<span class='report-metric-label'>${row.label || "Metric"}</span>`,
+                        `<span class='report-metric-value'>${formatMetricDisplay(row.value, row.unit || "")}</span>`,
+                        "</div>",
+                    ].join("");
+                }).join("");
+            }
+
+            const sections = payload.report_sections || {};
+            const parts = [];
+            if (sections.impression) parts.push(`<strong>Impression:</strong> ${sections.impression}`);
+            if (sections.largest_region) parts.push(`<strong>Largest region:</strong> ${sections.largest_region}`);
+            if (sections.risk_statement) parts.push(`<strong>Risk:</strong> ${sections.risk_statement}`);
+            if (payload.summary) parts.push(`<strong>Summary:</strong> ${payload.summary}`);
+            if (payload.generated_at) parts.push(`<strong>Generated:</strong> ${payload.generated_at}`);
+            narrative.innerHTML = parts.length > 0
+                ? parts.join("<br>")
+                : "Detailed report generated. Narrative fields are currently unavailable.";
+        }
+
+        async function generateDetailedReport(scanId = currentScanId, options = {}) {
+            const { silent = false } = options;
+            if (!scanId) {
+                if (!silent) updateStatus("Load a scan first before generating a report.");
+                return null;
+            }
+
+            if (!silent) {
+                updateStatus("Generating detailed clinical report...");
+                updateJobInfo(`report-${scanId}`);
+            }
+
+            const response = await fetch(`${API_BASE}/report/${encodeURIComponent(scanId)}?detailed=true`, {
+                headers: authToken ? authHeaders() : {},
+            });
+            if (!response.ok) {
+                throw new Error(`Report generation failed (${response.status})`);
+            }
+
+            const payload = await response.json();
+            latestReportPayload = payload;
+            renderDetailedReportPanel(payload);
+            if (!silent) {
+                updateStatus(`Detailed report generated for scan ${scanId}.`);
+                updateJobInfo(scanId);
+            }
+            return payload;
+        }
+
+        async function exportCasePackage() {
+            if (!currentScanId) {
+                updateStatus("Load a scan before exporting a case package.");
+                return;
+            }
+
+            let payload = latestReportPayload;
+            if (!payload || payload.scan_id !== currentScanId) {
+                try {
+                    payload = await generateDetailedReport(currentScanId, { silent: true });
+                } catch (error) {
+                    updateStatus(`Case package export failed: ${error.message}`);
+                    return;
+                }
+            }
+
+            const packagePayload = {
+                generated_at: new Date().toISOString(),
+                scan_id: currentScanId,
+                patient: getSelectedPatient() || null,
+                report: payload || null,
+                analysis: analysisData || null,
+            };
+
+            const blob = new Blob([JSON.stringify(packagePayload, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `case-package-${currentScanId}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            updateStatus("Case package exported as JSON.");
+        }
+
         async function loadDemo(patientId = selectedPatientId, scanId = "") {
             if (!authToken) {
                 updateStatus("Please sign in first.");
@@ -4130,6 +4587,7 @@
 
             updateStatus("Loading selected demo scan...");
             updateJobInfo(scanId || resolvedPatientId || "demo");
+            setLoaderState({ active: false, progress: 0, stage: "idle", etaSeconds: null });
 
             try {
                 const ingestResp = await fetch(`${API_BASE}/demo/ingest${patientQuery}`, {
@@ -4163,6 +4621,11 @@
             disposeVolumeRenderAssets();
             clearViewerFocus();
             clearTrajectoryPlan();
+            clearViewerMeasurementVisual();
+            clearViewerBookmarks(true);
+            clinicalState.viewerTools.mode = "";
+            clinicalState.viewerTools.measureStart = null;
+            updateViewerToolButtons();
 
             let reconstructionMode = "procedural";
             let reconstructionQuality = "";
@@ -4210,6 +4673,8 @@
             applyClipDepthFromSlider(clipSlider ? clipSlider.value : 0);
             setRenderMode(volumeLoaded ? activeRenderMode : "surface");
             updateViewerPickInfo("Click any cortical area in the 3D view to inspect the nearest affected region.");
+            latestReportPayload = null;
+            renderDetailedReportPanel(null);
 
             const regions = data.damage_summary || normalizeRegions(data);
             populateRegionList(regions);
@@ -4239,7 +4704,12 @@
                 updateStatus(`Loaded scan ${data.scan_id} with fallback preview mesh. ${volumeStatus}${fallbackSuffix}`);
             }
             updateJobInfo(data.scan_id || "completed");
+            setLoaderState({ active: false, progress: 100, stage: "complete", etaSeconds: 0 });
             loadDicomWorkstation(data);
+
+            generateDetailedReport(data.scan_id, { silent: true }).catch((error) => {
+                console.warn("Detailed report prefetch failed:", error);
+            });
         }
 
         async function uploadScan(file) {
@@ -4250,12 +4720,18 @@
 
             updateStatus("Uploading scan...");
             updateJobInfo("uploading");
+            setLoaderState({ active: true, progress: 4, stage: "uploading", etaSeconds: null });
 
             const formData = new FormData();
             formData.append("file", file);
 
             try {
-                const resp = await fetch(`${API_BASE}/ingest`, {
+                const params = new URLSearchParams({ async_mode: "true" });
+                if (selectedPatientId) {
+                    params.set("patient_id", selectedPatientId);
+                }
+
+                const resp = await fetch(`${API_BASE}/ingest?${params.toString()}`, {
                     method: "POST",
                     body: formData,
                     headers: authHeaders(),
@@ -4273,6 +4749,7 @@
             } catch (error) {
                 updateStatus(`Upload failed: ${error.message}`);
                 updateJobInfo("No active job");
+                setLoaderState({ active: false, progress: 0, stage: "failed", etaSeconds: null });
             }
         }
 
@@ -4281,11 +4758,16 @@
                 try {
                     const resp = await fetch(`${API_BASE}/status/${jobId}`, { headers: authHeaders() });
                     const data = await resp.json();
-                    updateStatus(`Processing stage: ${data.stage || "pending"} (${data.progress_pct || 0}%)`);
+                    const progress = Math.max(0, Math.min(100, Number(data.progress_pct) || 0));
+                    const stage = data.stage || "pending";
+                    const eta = Number.isFinite(Number(data.eta_seconds)) ? Number(data.eta_seconds) : null;
+                    updateStatus(`Processing stage: ${stage} (${progress}%). ${eta !== null ? formatEta(eta) : "ETA --"}`);
                     updateJobInfo(`${jobId} - ${data.status || "unknown"}`);
+                    setLoaderState({ active: true, progress, stage, etaSeconds: eta });
 
                     if (data.status === "complete") {
                         updateStatus("Analysis complete. Loading 3D viewer...");
+                        setLoaderState({ active: true, progress: 100, stage: "complete", etaSeconds: 0 });
                         try {
                             const resolvedScanId = data.scan_id || jobId;
                             const aResp = await fetch(`${API_BASE}/analysis/${encodeURIComponent(resolvedScanId)}`, { headers: authHeaders() });
@@ -4297,6 +4779,7 @@
                             await loadBrainFromAnalysis(analysisData);
                         } catch (error) {
                             updateStatus(`Analysis complete, but viewer data could not be loaded: ${error.message}`);
+                            setLoaderState({ active: false, progress: 0, stage: "failed", etaSeconds: null });
                         }
                         return;
                     }
@@ -4304,12 +4787,14 @@
                     if (data.status === "failed") {
                         updateStatus(`Processing failed: ${data.error_message || "unknown error"}`);
                         updateJobInfo(`${jobId} - failed`);
+                        setLoaderState({ active: false, progress: 0, stage: "failed", etaSeconds: null });
                         return;
                     }
 
                     setTimeout(poll, 3000);
                 } catch (error) {
                     updateStatus("Status check interrupted. Retrying...");
+                    setLoaderState({ active: true, progress: 0, stage: "reconnecting", etaSeconds: null });
                     setTimeout(poll, 5000);
                 }
             };
@@ -4363,6 +4848,11 @@
             updateLinkedNavButton();
             updateTrajectoryButtons();
             updateComparisonSummaries();
+            setLoaderState({ active: false, progress: 0, stage: "idle", etaSeconds: null });
+            renderDetailedReportPanel(null);
+            updateViewerToolButtons();
+            renderViewerBookmarks();
+            updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
 
             if (authToken) {
                 setAuthState("Session restored", "ok");
@@ -4383,6 +4873,16 @@
             document.getElementById("btn-render-hybrid").addEventListener("click", () => setRenderMode("hybrid"));
             document.getElementById("btn-render-volume").addEventListener("click", () => setRenderMode("volume"));
             document.getElementById("btn-render-surface").addEventListener("click", () => setRenderMode("surface"));
+            document.getElementById("btn-3d-measure").addEventListener("click", () => setViewerToolMode("measure"));
+            document.getElementById("btn-3d-bookmark").addEventListener("click", () => setViewerToolMode("bookmark"));
+            document.getElementById("btn-3d-clear-measure").addEventListener("click", () => {
+                clinicalState.viewerTools.measureStart = null;
+                clearViewerMeasurementVisual();
+                updateViewerToolOutput("3D measurement cleared. Click two points to start a new measurement.");
+            });
+            document.getElementById("btn-3d-clear-bookmarks").addEventListener("click", () => {
+                clearViewerBookmarks();
+            });
             document.getElementById("clip-slider").addEventListener("input", (event) => {
                 applyClipDepthFromSlider(event.target.value);
             });
@@ -4415,6 +4915,12 @@
 
             document.getElementById("patient-search").addEventListener("input", renderPatientList);
             document.getElementById("patient-risk-filter").addEventListener("change", renderPatientList);
+            document.getElementById("btn-create-patient").addEventListener("click", createPatientFromForm);
+            document.getElementById("new-patient-concern").addEventListener("keypress", (event) => {
+                if (event.key === "Enter") {
+                    createPatientFromForm();
+                }
+            });
 
             document.getElementById("dicom-series-select").addEventListener("change", async (event) => {
                 dicomState.seriesUid = event.target.value;
@@ -4585,6 +5091,14 @@
             document.getElementById("btn-export-report").addEventListener("click", () => {
                 openReportViewForCurrentScan();
             });
+            document.getElementById("btn-generate-report").addEventListener("click", async () => {
+                try {
+                    await generateDetailedReport();
+                } catch (error) {
+                    updateStatus(`Could not generate detailed report: ${error.message}`);
+                }
+            });
+            document.getElementById("btn-export-package").addEventListener("click", exportCasePackage);
 
             document.getElementById("btn-export-glb").addEventListener("click", async () => {
                 if (!currentScanId) {

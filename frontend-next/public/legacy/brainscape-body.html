@@ -75,6 +75,10 @@
                         <button class="viewer-tool-btn active" id="btn-render-hybrid" type="button">Hybrid</button>
                         <button class="viewer-tool-btn" id="btn-render-volume" type="button">Volume</button>
                         <button class="viewer-tool-btn" id="btn-render-surface" type="button">Surface</button>
+                        <button class="viewer-tool-btn" id="btn-3d-measure" type="button">3D Measure</button>
+                        <button class="viewer-tool-btn" id="btn-3d-clear-measure" type="button">Clear Measure</button>
+                        <button class="viewer-tool-btn" id="btn-3d-bookmark" type="button">Lesion Bookmark</button>
+                        <button class="viewer-tool-btn" id="btn-3d-clear-bookmarks" type="button">Clear Bookmarks</button>
                     </div>
                     <label class="clip-control" for="clip-slider">
                         Depth Clip
@@ -122,6 +126,10 @@
                     </div>
 
                     <div class="viewer-pick-info" id="viewer-pick-info">Click any cortical area in the 3D view to inspect the nearest affected region.</div>
+                    <div class="viewer-tool-output" id="viewer-tool-output">Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.</div>
+                    <div class="viewer-bookmarks" id="viewer-bookmarks">
+                        <div class="region-item muted">No lesion bookmarks yet.</div>
+                    </div>
                 </div>
             </section>
 
@@ -144,6 +152,23 @@
                             <option value="moderate">Moderate</option>
                             <option value="low">Low</option>
                         </select>
+                    </div>
+                    <div class="new-patient-form" id="new-patient-form">
+                        <input id="new-patient-name" class="patient-search" type="text" placeholder="New patient name">
+                        <input id="new-patient-age" class="patient-search" type="number" min="0" max="120" placeholder="Age">
+                        <select id="new-patient-sex" class="patient-filter">
+                            <option value="F">Female</option>
+                            <option value="M">Male</option>
+                            <option value="O">Other</option>
+                        </select>
+                        <select id="new-patient-modality" class="patient-filter">
+                            <option value="MRI_T1">MRI T1</option>
+                            <option value="fMRI">fMRI</option>
+                            <option value="DTI">DTI</option>
+                            <option value="EEG">EEG</option>
+                        </select>
+                        <input id="new-patient-concern" class="patient-search" type="text" placeholder="Primary concern">
+                        <button class="btn btn-primary" id="btn-create-patient" type="button">Create Patient</button>
                     </div>
                     <div class="patient-list" id="patient-list">
                         <div class="region-item muted">Loading sample patients...</div>
@@ -471,6 +496,18 @@
                 </section>
 
                 <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Detailed Report Metrics</div>
+                    <div id="report-metrics-grid" class="report-metrics-grid">
+                        <div class="region-item muted">Load a scan to generate quantitative report metrics.</div>
+                    </div>
+                    <div id="report-narrative" class="report-narrative">Detailed clinical narrative appears after report generation.</div>
+                    <div class="action-buttons" style="margin-top:0.5rem;">
+                        <button class="btn btn-primary" id="btn-generate-report" type="button">Generate Detailed Report</button>
+                        <button class="btn btn-secondary" id="btn-export-package" type="button">Export Case Package</button>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
                     <div class="section-title">Exports</div>
                     <div class="action-buttons">
                         <button class="btn btn-primary" id="btn-export-glb" type="button">Export GLB</button>
@@ -481,7 +518,18 @@
         </main>
 
         <footer class="status-bar glass">
-            <span id="status-text">Ready. Authenticate and load a scan to begin analysis.</span>
+            <div class="status-main">
+                <span id="status-text">Ready. Authenticate and load a scan to begin analysis.</span>
+                <div id="loader-panel" class="loader-panel">
+                    <div class="loader-meta">
+                        <span id="loader-stage">Waiting</span>
+                        <span id="loader-eta">ETA --</span>
+                    </div>
+                    <div class="loader-track">
+                        <div id="loader-progress" class="loader-progress"></div>
+                    </div>
+                </div>
+            </div>
             <span id="job-info">No active job</span>
         </footer>
     </div>
