@@ -83,13 +83,34 @@ export default function ReportViewPage() {
       setLoading(true);
       setError("");
       try {
-        const token = typeof window !== "undefined" ? window.localStorage.getItem("brainscape_token") || "" : "";
-        const response = await fetch(
-          `${apiBase}/report/${encodeURIComponent(scanId)}?mode=${encodeURIComponent(mode)}&detailed=true`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+        const requestReport = async (tokenValue = "") => {
+          return fetch(
+            `${apiBase}/report/${encodeURIComponent(scanId)}?mode=${encodeURIComponent(mode)}&detailed=true`,
+            {
+              headers: tokenValue ? { Authorization: `Bearer ${tokenValue}` } : {},
+            }
+          );
+        };
+
+        let token = typeof window !== "undefined" ? window.localStorage.getItem("brainscape_token") || "" : "";
+        let response = await requestReport(token);
+
+        if (response.status === 401) {
+          const authResp = await fetch(`${apiBase}/auth/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: "demo-clinician", role: "clinician" }),
+          });
+
+          if (authResp.ok) {
+            const authPayload = await authResp.json();
+            token = String(authPayload?.access_token || "");
+            if (token && typeof window !== "undefined") {
+              window.localStorage.setItem("brainscape_token", token);
+            }
+            response = await requestReport(token);
           }
-        );
+        }
 
         if (!response.ok) {
           const detail = await response.text();

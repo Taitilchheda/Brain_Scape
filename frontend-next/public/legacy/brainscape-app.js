@@ -4207,17 +4207,23 @@
             }
 
             try {
-                let response = await fetch(`${API_BASE}/patients`, {
-                    headers: authToken ? authHeaders() : {},
-                });
-                if (!response.ok) {
-                    response = await fetch(`${API_BASE}/demo/patients`);
-                }
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const sampleResponse = await fetch(`${API_BASE}/demo/patients`);
+                if (!sampleResponse.ok) throw new Error(`HTTP ${sampleResponse.status}`);
+                const samplePayload = await sampleResponse.json();
+                const samplePatients = Array.isArray(samplePayload.patients) ? samplePayload.patients : [];
 
-                const payload = await response.json();
-                demoPatients = Array.isArray(payload.patients) ? payload.patients : [];
-                demoPatients.sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
+                let allPatients = [];
+                try {
+                    const patientResponse = await fetchWithAuthRetry(`${API_BASE}/patients`, {}, "clinician");
+                    if (patientResponse.ok) {
+                        const patientPayload = await patientResponse.json();
+                        allPatients = Array.isArray(patientPayload.patients) ? patientPayload.patients : [];
+                    }
+                } catch (error) {
+                    // Keep sample list available even when auth refresh is unavailable.
+                }
+
+                demoPatients = mergePatientsWithSamples(samplePatients, allPatients);
 
                 if (!selectedPatientId && demoPatients.length > 0) {
                     selectedPatientId = demoPatients[0].patient_id;
@@ -4242,8 +4248,9 @@
         }
 
         async function createPatientFromForm() {
-            if (!authToken) {
-                updateStatus("Sign in before creating a patient record.");
+            const authenticated = await ensureAuthSession("clinician");
+            if (!authenticated) {
+                updateStatus("Could not authenticate. Please sign in and retry creating a patient.");
                 return;
             }
 
@@ -4274,9 +4281,9 @@
             createButton.textContent = "Creating...";
 
             try {
-                const response = await fetch(`${API_BASE}/patients`, {
+                const response = await fetchWithAuthRetry(`${API_BASE}/patients`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", ...authHeaders() },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         display_name: displayName,
                         age: Math.round(ageValue),
@@ -4386,18 +4393,85 @@
             }).join("");
         }
 
-        async function login() {
-            const role = document.getElementById("auth-role").value;
+        function currentRole() {
+            return (document.getElementById("auth-role")?.value || "clinician").toLowerCase();
+        }
+
+        async function requestAuthToken(role = currentRole()) {
+            const safeRole = ["clinician", "researcher", "patient"].includes(role) ? role : "clinician";
+            const resp = await fetch(`${API_BASE}/auth/token`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: `demo-${safeRole}`, role: safeRole }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.access_token) {
+                throw new Error(data?.detail || `Authentication failed (${resp.status})`);
+            }
+
+            authToken = data.access_token;
+            localStorage.setItem("brainscape_token", authToken);
+            setAuthState(`Signed in as ${safeRole}`, "ok");
+            return true;
+        }
+
+        async function ensureAuthSession(role = "clinician") {
+            if (authToken) return true;
             try {
-                const resp = await fetch(`${API_BASE}/auth/token`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ user_id: `demo-${role}`, role }),
-                });
-                const data = await resp.json();
-                authToken = data.access_token;
-                localStorage.setItem("brainscape_token", authToken);
-                setAuthState(`Signed in as ${role}`, "ok");
+                await requestAuthToken(role || currentRole());
+                return true;
+            } catch (error) {
+                setAuthState("Authentication failed", "error");
+                return false;
+            }
+        }
+
+        async function fetchWithAuthRetry(url, options = {}, role = "clinician") {
+            const baseHeaders = options.headers ? { ...options.headers } : {};
+            const call = () => fetch(url, {
+                ...options,
+                headers: {
+                    ...baseHeaders,
+                    ...(authToken ? authHeaders() : {}),
+                },
+            });
+
+            if (!authToken) {
+                const authenticated = await ensureAuthSession(role);
+                if (!authenticated) {
+                    throw new Error("Authentication required");
+                }
+            }
+
+            let response = await call();
+            if (response.status === 401) {
+                authToken = "";
+                localStorage.removeItem("brainscape_token");
+                const authenticated = await ensureAuthSession(role);
+                if (authenticated) {
+                    response = await call();
+                }
+            }
+
+            return response;
+        }
+
+        function mergePatientsWithSamples(samplePatients, allPatients) {
+            const sample = Array.isArray(samplePatients) ? samplePatients : [];
+            const all = Array.isArray(allPatients) ? allPatients : [];
+
+            const sampleIds = new Set(sample.map((patient) => patient.patient_id));
+            const extras = all.filter((patient) => patient?.patient_id && !sampleIds.has(patient.patient_id));
+            extras.sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
+
+            const orderedSample = [...sample].sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
+            return [...orderedSample, ...extras];
+        }
+
+        async function login() {
+            const role = currentRole();
+            try {
+                await requestAuthToken(role);
                 updateStatus(`Authenticated as ${role}. Upload a scan or load demo data.`);
                 fetchDemoPatients();
             } catch (error) {
@@ -4519,9 +4593,7 @@
                 updateJobInfo(`report-${scanId}`);
             }
 
-            const response = await fetch(`${API_BASE}/report/${encodeURIComponent(scanId)}?detailed=true`, {
-                headers: authToken ? authHeaders() : {},
-            });
+            const response = await fetchWithAuthRetry(`${API_BASE}/report/${encodeURIComponent(scanId)}?detailed=true`, {}, "clinician");
             if (!response.ok) {
                 throw new Error(`Report generation failed (${response.status})`);
             }
@@ -4571,8 +4643,9 @@
         }
 
         async function loadDemo(patientId = selectedPatientId, scanId = "") {
-            if (!authToken) {
-                updateStatus("Please sign in first.");
+            const authenticated = await ensureAuthSession("clinician");
+            if (!authenticated) {
+                updateStatus("Could not authenticate for demo loading. Please sign in and retry.");
                 return;
             }
 
@@ -4590,15 +4663,14 @@
             setLoaderState({ active: false, progress: 0, stage: "idle", etaSeconds: null });
 
             try {
-                const ingestResp = await fetch(`${API_BASE}/demo/ingest${patientQuery}`, {
+                const ingestResp = await fetchWithAuthRetry(`${API_BASE}/demo/ingest${patientQuery}`, {
                     method: "POST",
-                    headers: authHeaders(),
-                });
+                }, "clinician");
                 if (!ingestResp.ok) {
                     throw new Error(`Demo ingest failed (${ingestResp.status})`);
                 }
 
-                const resp = await fetch(`${API_BASE}/demo/analysis${patientQuery}`, { headers: authHeaders() });
+                const resp = await fetchWithAuthRetry(`${API_BASE}/demo/analysis${patientQuery}`, {}, "clinician");
                 if (!resp.ok) {
                     throw new Error(`Demo analysis failed (${resp.status})`);
                 }
@@ -4713,8 +4785,9 @@
         }
 
         async function uploadScan(file) {
-            if (!authToken) {
-                updateStatus("Please sign in first.");
+            const authenticated = await ensureAuthSession("clinician");
+            if (!authenticated) {
+                updateStatus("Could not authenticate. Please sign in and retry upload.");
                 return;
             }
 
@@ -4731,11 +4804,10 @@
                     params.set("patient_id", selectedPatientId);
                 }
 
-                const resp = await fetch(`${API_BASE}/ingest?${params.toString()}`, {
+                const resp = await fetchWithAuthRetry(`${API_BASE}/ingest?${params.toString()}`, {
                     method: "POST",
                     body: formData,
-                    headers: authHeaders(),
-                });
+                }, "clinician");
                 const data = await resp.json();
                 if (!resp.ok) {
                     throw new Error(data.detail || `Upload failed (${resp.status})`);
@@ -4756,7 +4828,7 @@
         async function pollJobStatus(jobId) {
             const poll = async () => {
                 try {
-                    const resp = await fetch(`${API_BASE}/status/${jobId}`, { headers: authHeaders() });
+                    const resp = await fetchWithAuthRetry(`${API_BASE}/status/${jobId}`, {}, "clinician");
                     const data = await resp.json();
                     const progress = Math.max(0, Math.min(100, Number(data.progress_pct) || 0));
                     const stage = data.stage || "pending";
@@ -4770,7 +4842,7 @@
                         setLoaderState({ active: true, progress: 100, stage: "complete", etaSeconds: 0 });
                         try {
                             const resolvedScanId = data.scan_id || jobId;
-                            const aResp = await fetch(`${API_BASE}/analysis/${encodeURIComponent(resolvedScanId)}`, { headers: authHeaders() });
+                            const aResp = await fetchWithAuthRetry(`${API_BASE}/analysis/${encodeURIComponent(resolvedScanId)}`, {}, "clinician");
                             if (!aResp.ok) {
                                 throw new Error(`Analysis fetch failed (${aResp.status})`);
                             }
@@ -4810,11 +4882,11 @@
             el.innerHTML = "<span class='loading-spinner'></span>Analyzing clinical context...";
 
             try {
-                const resp = await fetch(`${API_BASE}/query`, {
+                const resp = await fetchWithAuthRetry(`${API_BASE}/query`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", ...authHeaders() },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ scan_id: currentScanId, question }),
-                });
+                }, "clinician");
                 const data = await resp.json();
                 el.textContent = data.answer || data.response || JSON.stringify(data);
             } catch (error) {
