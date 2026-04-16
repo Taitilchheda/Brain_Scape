@@ -243,10 +243,16 @@ class DifferentialDiagnoser:
 
         # Sort by probability and assign ranks
         candidates.sort(key=lambda c: c.probability, reverse=True)
-        for i, c in enumerate(candidates[:top_k]):
+        selected = candidates[:top_k]
+        total = sum(c.probability for c in selected)
+        if total > 0:
+            for c in selected:
+                c.probability = c.probability / total
+
+        for i, c in enumerate(selected):
             c.rank = i + 1
 
-        return candidates[:top_k]
+        return selected
 
     def _diagnose_rule_based(
         self,
@@ -359,10 +365,16 @@ class DifferentialDiagnoser:
             for c in candidates:
                 c.probability = c.probability / total
 
-        for i, c in enumerate(candidates[:top_k]):
+        selected = candidates[:top_k]
+        selected_total = sum(c.probability for c in selected)
+        if selected_total > 0:
+            for c in selected:
+                c.probability = c.probability / selected_total
+
+        for i, c in enumerate(selected):
             c.rank = i + 1
 
-        return candidates[:top_k]
+        return selected
 
     def _encode_region_features(self, damage_summary: List[Dict]) -> np.ndarray:
         """Encode damage summary into feature vector for the neural model."""

@@ -9,6 +9,7 @@ or downstream service unmasked.
 """
 
 import hashlib
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -83,7 +84,7 @@ class PHIScrubber:
         )
 
         if not results:
-            return text
+            return self._scrub_date_patterns(text)
 
         # Build replacement operators for each entity type
         operators = {
@@ -103,8 +104,7 @@ class PHIScrubber:
             analyzer_results=results,
             operators=operators,
         )
-
-        return anonymized_result.text
+        return self._scrub_date_patterns(anonymized_result.text)
 
     def scrub_dicom(self, file_path: str, output_path: str) -> str:
         """
@@ -229,3 +229,20 @@ class PHIScrubber:
         """Generate an age range bucket (e.g., '55-60 years')."""
         # In production, this would compute the range from the actual DOB
         return "age-range-withheld"
+
+    def _scrub_date_patterns(self, text: str) -> str:
+        """Fallback date scrubber for explicit DOB/date patterns missed by NER."""
+        if not text:
+            return text
+
+        date_patterns = [
+            r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+            r"\b\d{4}[/-]\d{2}[/-]\d{2}\b",
+            r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},\s+\d{4}\b",
+            r"\b(?:dob|date\s+of\s+birth)\s*[:=-]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+        ]
+
+        scrubbed = text
+        for pattern in date_patterns:
+            scrubbed = re.sub(pattern, self._age_range_replacement(), scrubbed, flags=re.IGNORECASE)
+        return scrubbed

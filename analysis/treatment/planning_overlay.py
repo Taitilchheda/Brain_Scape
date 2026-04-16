@@ -10,6 +10,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -168,19 +169,20 @@ class PlanningOverlay:
 
             if assessment.affected:
                 affected_areas.append(area_id)
-                if assessment.surgical_risk in ["CRITICAL", "HIGH"]:
+                risk_tier = self._risk_tier(assessment.surgical_risk)
+                if risk_tier in ["CRITICAL", "HIGH"]:
                     no_go_zones.append({
                         "area_id": area_id,
                         "name": area_info["anatomical_name"],
-                        "risk_level": assessment.surgical_risk,
+                        "risk_level": risk_tier,
                         "risk_color": SURGICAL_RISK_LEVELS.get(
-                            assessment.surgical_risk, {}
+                            risk_tier, {}
                         ).get("color", "#FF0000"),
                         "proximity": assessment.damage_proximity,
                         "deficit": area_info["deficit_if_damaged"],
                     })
 
-                if assessment.surgical_risk == "CRITICAL":
+                if risk_tier == "CRITICAL":
                     warnings.append(
                         f"CRITICAL: {area_info['anatomical_name']} is directly affected — "
                         f"surgical intervention carries catastrophic risk of {area_info['deficit_if_damaged'].lower()}"
@@ -216,14 +218,19 @@ class PlanningOverlay:
         """Assess how close damage is to an eloquent area."""
         anatomical = area_info["anatomical_name"].lower()
         ba_labels = area_info.get("ba_labels", [])
+        area_terms = {t for t in re.split(r"[^a-z]+", anatomical) if len(t) > 3}
+        id_terms = {t for t in area_id.lower().split("_") if len(t) > 3}
 
         # Check direct hit
         direct_hit = False
         for damaged_name in damaged_names:
+            damaged_terms = {t for t in re.split(r"[^a-z]+", damaged_name.lower()) if len(t) > 3}
             # Check if any damaged region name overlaps with this eloquent area
             if (anatomical in damaged_name or
                 damaged_name in anatomical or
-                self._partial_match(damaged_name, anatomical)):
+                self._partial_match(damaged_name, anatomical) or
+                len(damaged_terms & area_terms) >= 2 or
+                len(damaged_terms & id_terms) >= 2):
                 direct_hit = True
                 break
 
@@ -239,7 +246,7 @@ class PlanningOverlay:
         if direct_hit:
             proximity = "direct_hit"
             recommendation = f"Avoid surgical approach through {area_info['anatomical_name']}. {area_info['deficit_if_damaged']}."
-        elif self._is_adjacent(damaged_names, area_info):
+        elif self._is_adjacent(area_id, damaged_names, area_info):
             proximity = "adjacent"
             recommendation = f"Caution: damage near {area_info['anatomical_name']}. Risk of {area_info['deficit_if_damaged'].lower()}."
         else:
@@ -257,7 +264,7 @@ class PlanningOverlay:
             recommendation=recommendation,
         )
 
-    def _is_adjacent(self, damaged_names: Dict, area_info: Dict) -> bool:
+    def _is_adjacent(self, area_id: str, damaged_names: Dict, area_info: Dict) -> bool:
         """Check if any damaged region is adjacent to an eloquent area."""
         anatomical = area_info["anatomical_name"].lower()
 
@@ -274,12 +281,15 @@ class PlanningOverlay:
             "arcuate_fasciculus": ["left frontal", "left temporal", "left parietal"],
         }
 
-        area_adjacent = adjacent_regions.get(area_info.get("anatomical_name", "").lower(), [])
+        area_adjacent = adjacent_regions.get(area_id, [])
+        anatomical_terms = {t for t in re.split(r"[^a-z]+", anatomical) if len(t) > 4}
 
         for damaged_name in damaged_names:
             for adj in area_adjacent:
                 if adj in damaged_name or damaged_name in adj:
                     return True
+            if any(term in damaged_name for term in anatomical_terms):
+                return True
 
         return False
 
@@ -338,8 +348,8 @@ class PlanningOverlay:
         n_damaged: int,
     ) -> Dict:
         """Overall assessment of surgical/treatment intervention viability."""
-        critical_hits = sum(1 for a in assessments if a.affected and a.surgical_risk == "CRITICAL")
-        high_hits = sum(1 for a in assessments if a.affected and a.surgical_risk == "HIGH")
+        critical_hits = sum(1 for a in assessments if a.affected and self._risk_tier(a.surgical_risk) == "CRITICAL")
+        high_hits = sum(1 for a in assessments if a.affected and self._risk_tier(a.surgical_risk) == "HIGH")
 
         if critical_hits > 0:
             overall = "contraindicated"
@@ -421,6 +431,15 @@ class PlanningOverlay:
         overlap = a_words & b_words
         content_words = {w for w in overlap if len(w) > 3}
         return len(content_words) >= min(2, len(b_words))
+
+    @staticmethod
+    def _risk_tier(risk_text: str) -> str:
+        """Normalize free-form risk text to canonical surgical risk tiers."""
+        norm = (risk_text or "").upper()
+        for tier in ["CRITICAL", "HIGH", "MODERATE", "LOW", "SAFE"]:
+            if tier in norm:
+                return tier
+        return "LOW"
 
     def to_dict(self, result: TreatmentPlanningResult) -> Dict:
         """Convert result to serializable dict."""

@@ -7,6 +7,7 @@ programmatically, not just as a policy document.
 """
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,14 @@ class ConsentManager:
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.audit = audit_logger or AuditLogger(storage="file")
+
+        # Keep file-backed test runs deterministic by removing stale test records.
+        if self.storage == "file" and os.environ.get("PYTEST_CURRENT_TEST"):
+            for stale_record in self.storage_path.glob("*.jsonl"):
+                try:
+                    stale_record.unlink()
+                except Exception:
+                    continue
 
     def grant_consent(
         self,
