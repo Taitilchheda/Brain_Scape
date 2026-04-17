@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import LegacyAppLoader from "./legacy-app-loader";
 
 function loadLegacyFile(relativePath: string): string {
   const absolute = path.join(process.cwd(), "public", "legacy", relativePath);
@@ -16,8 +17,8 @@ export default function HomePage() {
     <>
       <script dangerouslySetInnerHTML={{ __html: apiBootstrap }} />
       <script type="importmap" dangerouslySetInnerHTML={{ __html: importMap }} />
-      <div dangerouslySetInnerHTML={{ __html: markup }} />
-      <script type="module" src="/legacy/brainscape-app.js" />
+      <div suppressHydrationWarning dangerouslySetInnerHTML={{ __html: markup }} />
+      <LegacyAppLoader />
     </>
   );
 }
