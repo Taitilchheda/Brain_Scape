@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ValidationResult:
     """Result of scan quality validation."""
-    is_valid: bool
+    is_valid: bool = False
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     quality_score: float = 0.0  # 0.0 to 1.0

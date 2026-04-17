@@ -31,6 +31,9 @@ PERMISSIONS = {
         "POST /connectivity/{scan_id}": True,
         "POST /treatment-planning/{scan_id}": True,
         "GET /dashboard/{institution_id}": True,
+        "GET /governance/{scan_id}": True,
+        "GET /signoff/{scan_id}": True,
+        "POST /signoff/{scan_id}": True,
     },
     "researcher": {
         "POST /ingest": True,
@@ -42,6 +45,9 @@ PERMISSIONS = {
         "GET /longitudinal": "anonymized",
         "POST /diagnosis/{scan_id}": True,
         "POST /connectivity/{scan_id}": True,
+        "GET /governance/{scan_id}": True,
+        "GET /signoff/{scan_id}": True,
+        "POST /signoff/{scan_id}": True,
     },
     "patient": {
         "POST /ingest": True,
@@ -52,6 +58,8 @@ PERMISSIONS = {
         "POST /annotate": False,
         "GET /prognosis/{scan_id}": "own_only",
         "GET /export/{scan_id}": "own_only",
+        "GET /governance/{scan_id}": "own_only",
+        "GET /signoff/{scan_id}": "own_only",
     },
 }
 

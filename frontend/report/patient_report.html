@@ -3,321 +3,481 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brain_Scape — Patient Report</title>
+    <title>Brain_Scape Patient Summary</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: #333; line-height: 1.7; background: #fff;
-            max-width: 800px; margin: 0 auto; padding: 40px 30px;
+        :root {
+            --ink-900: #10253f;
+            --ink-700: #2f486d;
+            --ink-500: #647f9f;
+            --surface: rgba(255, 255, 255, 0.84);
+            --surface-soft: rgba(255, 255, 255, 0.93);
+            --line-soft: rgba(255, 255, 255, 0.92);
+            --accent: #1f77b4;
+            --accent-2: #3ea6df;
+            --ok: #27ae60;
+            --warn: #e67e22;
+            --critical: #e74c3c;
+            --radius-xl: 22px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --shadow: 0 18px 36px rgba(19, 42, 72, 0.14);
         }
-        h1 { color: #2c3e50; font-size: 28px; margin-bottom: 8px; }
-        h2 { color: #2c3e50; font-size: 22px; margin: 28px 0 12px; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
-        h3 { color: #34495e; font-size: 18px; margin: 20px 0 10px; }
-        .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #3498db; padding-bottom: 20px; }
-        .header .logo { font-size: 36px; margin-bottom: 8px; }
-        .header .subtitle { color: #7f8c8d; font-size: 14px; }
-        .meta { background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 24px; }
-        .meta-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .meta-label { color: #7f8c8d; font-size: 14px; }
-        .meta-value { font-weight: 600; font-size: 14px; }
 
-        /* Severity colors — matches the app-wide contract */
-        .severity-RED { background: #E74C3C; color: #fff; }
-        .severity-ORANGE { background: #E67E22; color: #fff; }
-        .severity-YELLOW { background: #F1C40F; color: #333; }
-        .severity-GREEN { background: #27AE60; color: #fff; }
-        .severity-BLUE { background: #4A90D9; color: #fff; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Source Sans 3", "Segoe UI", sans-serif;
+            color: var(--ink-900);
+            background:
+                radial-gradient(circle at 7% 12%, rgba(130, 189, 231, 0.24), transparent 35%),
+                radial-gradient(circle at 88% 8%, rgba(156, 227, 214, 0.2), transparent 30%),
+                linear-gradient(165deg, #eef5fc, #f8fbff);
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .sheet {
+            max-width: 980px;
+            margin: 0 auto;
+            display: grid;
+            gap: 0.86rem;
+        }
+
+        .glass {
+            background: var(--surface);
+            border: 1px solid var(--line-soft);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        .hero {
+            padding: 1rem 1.15rem;
+            display: grid;
+            gap: 0.44rem;
+            animation: fade-up 0.52s ease both;
+        }
+
+        .hero h1 {
+            font-family: "Sora", sans-serif;
+            font-size: 1.34rem;
+            font-weight: 680;
+            letter-spacing: 0.01em;
+        }
+
+        .hero p {
+            color: var(--ink-500);
+            font-size: 0.94rem;
+            line-height: 1.5;
+        }
+
+        .meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.3rem;
+        }
+
+        .meta-pill {
+            border-radius: 999px;
+            padding: 0.24rem 0.55rem;
+            font-size: 0.76rem;
+            font-weight: 650;
+            color: var(--ink-700);
+            border: 1px solid rgba(190, 212, 236, 0.85);
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .card {
+            padding: 0.88rem;
+            border-radius: var(--radius-md);
+            background: var(--surface-soft);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            animation: fade-up 0.58s ease both;
+        }
+
+        .card h2 {
+            font-family: "Sora", sans-serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ink-500);
+            margin-bottom: 0.58rem;
+            font-weight: 650;
+        }
 
         .summary-box {
-            background: linear-gradient(135deg, #e8f4fd, #f0f8ff);
-            border-left: 5px solid #3498db; padding: 20px;
-            border-radius: 0 8px 8px 0; margin: 20px 0;
-            font-size: 16px; line-height: 1.8;
-        }
-        .summary-box .calibrated {
-            font-style: italic; color: #7f8c8d; font-size: 14px; margin-top: 8px;
-        }
-
-        .region-card {
-            border: 1px solid #e0e0e0; border-radius: 10px;
-            padding: 18px; margin-bottom: 14px;
-            transition: box-shadow 0.2s;
-        }
-        .region-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .region-card .region-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .region-card .region-name { font-size: 18px; font-weight: 600; }
-        .severity-badge {
-            display: inline-block; padding: 4px 12px; border-radius: 20px;
-            font-size: 13px; font-weight: 600;
-        }
-        .region-card .function { color: #555; margin-bottom: 8px; }
-        .region-card .what-this-means {
-            background: #f8f9fa; padding: 12px; border-radius: 6px;
-            font-size: 15px; line-height: 1.7;
-        }
-        .region-card .confidence-note {
-            font-size: 13px; color: #95a5a6; margin-top: 8px;
+            border-left: 4px solid rgba(43, 132, 198, 0.75);
+            border-radius: 10px;
+            padding: 0.62rem 0.72rem;
+            background: rgba(255, 255, 255, 0.75);
+            line-height: 1.58;
+            font-size: 0.94rem;
+            color: var(--ink-700);
         }
 
-        /* Prognosis section */
-        .milestone {
-            display: flex; gap: 16px; margin-bottom: 14px;
-            padding: 12px; background: #f8f9fa; border-radius: 8px;
+        .confidence-note {
+            margin-top: 0.45rem;
+            color: #647f9f;
+            font-size: 0.82rem;
         }
-        .milestone .timeframe {
-            min-width: 120px; font-weight: 600; color: #2c3e50;
-        }
-        .milestone .prob-bar {
-            height: 8px; background: #e0e0e0; border-radius: 4px;
-            margin: 8px 0; position: relative; overflow: hidden;
-        }
-        .milestone .prob-fill {
-            height: 100%; border-radius: 4px; background: #3498db;
-        }
-        .milestone .prob-range { font-size: 13px; color: #7f8c8d; }
 
-        /* Recovery recommendations */
-        .recommendation {
-            border-left: 4px solid #27ae60; padding: 12px 16px;
-            margin-bottom: 10px; background: #f9fef9; border-radius: 0 6px 6px 0;
+        .review-strip {
+            display: grid;
+            gap: 0.44rem;
         }
-        .recommendation.short-term { border-color: #e67e22; background: #fef9f4; }
-        .recommendation .rec-label { font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-        .recommendation.short-term .rec-label { color: #e67e22; }
-        .recommendation:not(.short-term) .rec-label { color: #27ae60; }
 
-        /* Disclaimer */
+        .review-pill {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            border-radius: 999px;
+            padding: 0.2rem 0.5rem;
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-transform: capitalize;
+            color: #26527a;
+            background: rgba(226, 240, 252, 0.92);
+            border: 1px solid rgba(189, 212, 236, 0.88);
+        }
+
+        .review-note {
+            border-radius: 10px;
+            border: 1px solid rgba(205, 223, 245, 0.82);
+            background: rgba(255, 255, 255, 0.76);
+            color: #5a7191;
+            font-size: 0.83rem;
+            line-height: 1.42;
+            padding: 0.5rem 0.56rem;
+        }
+
+        .legend {
+            display: flex;
+            gap: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-pill {
+            border-radius: 999px;
+            padding: 0.24rem 0.52rem;
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .legend-red { background: #e74c3c; }
+        .legend-orange { background: #e67e22; }
+        .legend-yellow { background: #c7a20e; }
+        .legend-green { background: #27ae60; }
+        .legend-blue { background: #4a90d9; }
+
+        .region-list {
+            display: grid;
+            gap: 0.52rem;
+        }
+
+        .region {
+            padding: 0.55rem 0.6rem;
+            border-radius: var(--radius-sm);
+            border-left: 4px solid rgba(205, 219, 238, 0.9);
+            background: rgba(255, 255, 255, 0.77);
+            color: var(--ink-700);
+        }
+
+        .region h3 {
+            font-size: 0.92rem;
+            color: var(--ink-900);
+            font-weight: 650;
+            margin-bottom: 0.22rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.4rem;
+        }
+
+        .severity {
+            font-size: 0.7rem;
+            border-radius: 999px;
+            padding: 0.16rem 0.42rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .sev-red { background: rgba(231, 76, 60, 0.16); color: #a03325; }
+        .sev-orange { background: rgba(230, 126, 34, 0.16); color: #9b5518; }
+        .sev-yellow { background: rgba(241, 196, 15, 0.22); color: #795f09; }
+        .sev-green { background: rgba(39, 174, 96, 0.2); color: #1f7b45; }
+        .sev-blue { background: rgba(74, 144, 217, 0.2); color: #245f98; }
+
+        .region p {
+            line-height: 1.45;
+            font-size: 0.86rem;
+            color: var(--ink-700);
+        }
+
+        .tips {
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .tip {
+            border-left: 3px solid rgba(42, 133, 194, 0.55);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.74);
+            padding: 0.52rem 0.56rem;
+            color: var(--ink-700);
+            font-size: 0.85rem;
+        }
+
         .disclaimer {
-            background: #fff3cd; border: 1px solid #ffc107;
-            padding: 16px; border-radius: 8px; margin-top: 30px;
-            font-size: 14px; color: #856404;
+            border-radius: 12px;
+            background: rgba(255, 242, 220, 0.86);
+            border: 1px solid rgba(255, 214, 164, 0.86);
+            color: #7c4f11;
+            padding: 0.72rem 0.82rem;
+            font-size: 0.82rem;
+            line-height: 1.4;
         }
-        .disclaimer strong { display: block; margin-bottom: 4px; }
 
-        /* Print optimization */
+        .disclaimer strong {
+            display: block;
+            margin-bottom: 0.2rem;
+            font-family: "Sora", sans-serif;
+            color: #8a510f;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            padding-top: 0.2rem;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 999px;
+            padding: 0.44rem 0.8rem;
+            cursor: pointer;
+            font-family: "Sora", sans-serif;
+            font-size: 0.79rem;
+            font-weight: 650;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .btn-primary {
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 9px 16px rgba(43, 129, 199, 0.32);
+        }
+
+        .btn-secondary {
+            color: var(--ink-700);
+            border: 1px solid rgba(189, 208, 232, 0.82);
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         @media print {
-            body { max-width: none; padding: 20px; }
-            .region-card { break-inside: avoid; }
-            .milestone { break-inside: avoid; }
-            h2 { page-break-after: avoid; }
-        }
+            body {
+                background: #ffffff;
+                padding: 0;
+            }
 
-        /* Visual-first: embedded GIF placeholder */
-        .brain-visual {
-            text-align: center; margin: 24px 0;
-            padding: 20px; background: #f0f0f0; border-radius: 8px;
+            .glass,
+            .card {
+                backdrop-filter: none;
+                box-shadow: none;
+                border: 1px solid #d8e4f3;
+                background: #ffffff;
+            }
+
+            .actions {
+                display: none;
+            }
         }
-        .brain-visual img { max-width: 100%; border-radius: 8px; }
-        .brain-visual .caption { font-size: 13px; color: #7f8c8d; margin-top: 8px; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">🧠</div>
-        <h1>Your Brain Scan Report</h1>
-        <div class="subtitle">Brain_Scape — Understanding Your Results</div>
-    </div>
+    <main class="sheet">
+        <header class="hero glass">
+            <h1>Your Brain Scan Summary</h1>
+            <p>This page explains your scan in plain language. Your neurologist will use the full clinical report for diagnosis and treatment planning.</p>
+            <div class="meta-row">
+                <span class="meta-pill">Report ID: <span id="scan-id">N/A</span></span>
+                <span class="meta-pill">Generated: <span id="report-date">N/A</span></span>
+            </div>
+        </header>
 
-    <div class="meta">
-        <div class="meta-row">
-            <span class="meta-label">Report Date</span>
-            <span class="meta-value" id="report-date"></span>
+        <section class="card glass">
+            <h2>Overall Summary</h2>
+            <div class="summary-box" id="summary-text">Loading summary...</div>
+            <div class="confidence-note" id="confidence-note"></div>
+        </section>
+
+        <section class="card glass">
+            <h2>Clinical Review Status</h2>
+            <div class="review-strip">
+                <span class="review-pill" id="review-state-pill">Review pending</span>
+                <div class="review-note" id="review-message">Your care team is reviewing this case.</div>
+                <div class="review-note" id="review-provenance">Scan provenance details will appear once data is loaded.</div>
+            </div>
+        </section>
+
+        <section class="card glass">
+            <h2>Color Guide</h2>
+            <div class="legend">
+                <span class="legend-pill legend-red">Significant change</span>
+                <span class="legend-pill legend-orange">Moderate change</span>
+                <span class="legend-pill legend-yellow">Mild change</span>
+                <span class="legend-pill legend-green">No major change</span>
+                <span class="legend-pill legend-blue">Not involved</span>
+            </div>
+        </section>
+
+        <section class="card glass">
+            <h2>Affected Brain Areas</h2>
+            <div class="region-list" id="region-list">
+                <div class="region">
+                    <h3><span>No data loaded</span></h3>
+                    <p>Load a scan to display region-level explanations.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="card glass">
+            <h2>What To Discuss With Your Care Team</h2>
+            <div class="tips" id="tips-list">
+                <div class="tip">Ask which findings are most clinically important right now.</div>
+                <div class="tip">Ask whether follow-up imaging is needed and when.</div>
+                <div class="tip">Ask which symptoms should prompt urgent medical attention.</div>
+            </div>
+        </section>
+
+        <section class="card glass">
+            <div class="disclaimer">
+                <strong>Important</strong>
+                This summary is informational and does not replace medical advice. Please review all results with your neurologist or treating physician.
+            </div>
+        </section>
+
+        <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="window.close()">Close</button>
+            <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
         </div>
-        <div class="meta-row">
-            <span class="meta-label">Scan Type</span>
-            <span class="meta-value">MRI Brain Scan</span>
-        </div>
-        <div class="meta-row">
-            <span class="meta-label">Report ID</span>
-            <span class="meta-value" id="scan-id"></span>
-        </div>
-    </div>
-
-    <div class="brain-visual">
-        <img id="brain-gif" src="" alt="3D Brain Visualization" onerror="this.parentElement.style.display='none'">
-        <div class="caption">Your brain scan — areas with color show where changes were found</div>
-    </div>
-
-    <!-- Color legend for patients -->
-    <div style="margin-bottom: 24px; padding: 14px; background: #f8f9fa; border-radius: 8px;">
-        <h3 style="margin: 0 0 10px; font-size: 15px;">What the Colors Mean</h3>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            <span class="severity-badge severity-RED">Significant change found</span>
-            <span class="severity-badge severity-ORANGE">Moderate change found</span>
-            <span class="severity-badge severity-YELLOW">Mild change found</span>
-            <span class="severity-badge severity-GREEN">No significant change</span>
-            <span class="severity-badge severity-BLUE">Not examined</span>
-        </div>
-    </div>
-
-    <div id="executive-summary" class="summary-box">
-        <h3 style="margin: 0 0 8px;">What We Found</h3>
-        <p id="summary-text">Loading your results...</p>
-        <p class="calibrated" id="confidence-note"></p>
-    </div>
-
-    <h2>Areas of Your Brain Examined</h2>
-    <div id="regions-container"></div>
-
-    <h2>What to Expect Going Forward</h2>
-    <div id="prognosis-container"></div>
-
-    <h2>Recommendations</h2>
-    <div id="recommendations-container"></div>
-
-    <div class="disclaimer">
-        <strong>Important</strong>
-        This report was generated by Brain_Scape's AI analysis system. It is designed to help
-        your doctor understand your scan, but it is <strong>not a diagnosis</strong>. Only your
-        doctor can make a diagnosis and recommend treatment. If you have questions about these
-        results, please talk to your healthcare provider.
-    </div>
+    </main>
 
     <script>
-        // Patient-friendly region function descriptions
         const REGION_FUNCTIONS = {
-            'hippocampus': 'This area helps you form new memories and remember where things are.',
-            'frontal lobe': 'This area helps you think, plan, make decisions, and control your behavior.',
-            'temporal lobe': 'This area helps you understand language, hear sounds, and recognize faces.',
-            'parietal lobe': 'This area helps you feel touch, know where your body is, and process spatial information.',
-            'occipital lobe': 'This area processes what you see — it helps you understand visual information from your eyes.',
-            'cerebellum': 'This area helps you move smoothly, keep your balance, and coordinate your muscles.',
-            'brainstem': 'This area controls automatic functions like breathing, heart rate, and blood pressure.',
-            'thalamus': 'This area acts as a relay station, sending sensory information to the right part of your brain.',
-            'basal ganglia': 'This area helps control your movements and is involved in habits and rewards.',
-            'cingulate': 'This area helps regulate emotions, decision-making, and attention.',
-            'corpus callosum': 'This is the bridge between the left and right sides of your brain, helping them communicate.',
-            'insula': 'This area helps you feel emotions, sense your body (like hunger), and understand others\' feelings.',
-            'cingulum': 'This pathway connects memory and emotion centers in your brain.',
+            hippocamp: "This area is linked to memory formation and recall.",
+            frontal: "This area supports planning, focus, behavior control, and decision-making.",
+            temporal: "This area supports language understanding, hearing, and memory processing.",
+            parietal: "This area supports spatial awareness and sensory integration.",
+            occipital: "This area processes visual signals.",
+            cerebellum: "This area helps with balance and movement coordination.",
+            brainstem: "This area helps control breathing, heart rate, and other vital functions.",
         };
 
-        const SEVERITY_PATIENT_LABELS = {
-            'RED': 'Significant change found',
-            'ORANGE': 'Moderate change found',
-            'YELLOW': 'Mild change found',
-            'GREEN': 'No significant change',
-            'BLUE': 'Not examined',
+        const severityClass = {
+            RED: "sev-red",
+            ORANGE: "sev-orange",
+            YELLOW: "sev-yellow",
+            GREEN: "sev-green",
+            BLUE: "sev-blue",
         };
 
-        function getRegionFunction(regionName) {
-            const lower = regionName.toLowerCase();
-            for (const [key, desc] of Object.entries(REGION_FUNCTIONS)) {
-                if (lower.includes(key)) return desc;
-            }
-            return 'This is an area of your brain that helps with specific mental functions.';
+        function inferScanId() {
+            const pathParts = window.location.pathname.split("/").filter(Boolean);
+            return pathParts.length ? pathParts[pathParts.length - 1] : "N/A";
         }
 
-        function renderPatientReport(data) {
-            // Set metadata
-            document.getElementById('report-date').textContent = new Date().toLocaleDateString();
-            document.getElementById('scan-id').textContent = data.scan_id || 'N/A';
+        function getRegionText(name) {
+            const lower = (name || "").toLowerCase();
+            for (const key of Object.keys(REGION_FUNCTIONS)) {
+                if (lower.includes(key)) return REGION_FUNCTIONS[key];
+            }
+            return "This region contributes to normal neurological function and should be interpreted with your full clinical context.";
+        }
 
-            // Set brain GIF
-            if (data.gif_url) {
-                document.getElementById('brain-gif').src = data.gif_url;
+        function render(data) {
+            const governance = data.clinical_governance || {};
+            const provenance = governance.provenance || data.provenance || {};
+            document.getElementById("summary-text").textContent = data.executive_summary || "Analysis complete.";
+            const confidence = data.overall_confidence != null ? Math.round(data.overall_confidence * 100) : null;
+            document.getElementById("confidence-note").textContent = confidence != null
+                ? `Model confidence estimate: ${confidence}%. Your neurologist will validate these findings.`
+                : "Confidence estimate unavailable.";
+
+            const reviewState = governance.review_state || data.review_state || "review_pending";
+            const decisionTier = governance.decision_tier || data.decision_tier || "requires_clinician_review";
+            document.getElementById("review-state-pill").textContent = String(reviewState).split("_").join(" ");
+            document.getElementById("review-message").textContent = governance.messaging?.patient_notice
+                || "Your care team reviews these AI findings before final decisions are made.";
+
+            const sourceKind = provenance.source_kind || "unknown";
+            const synthetic = provenance.synthetic_fallback ? "yes" : "no";
+            document.getElementById("review-provenance").textContent = `Decision tier: ${String(decisionTier).split("_").join(" ")}. Source: ${sourceKind}. Synthetic fallback: ${synthetic}.`;
+
+            const list = document.getElementById("region-list");
+            const regions = (data.damage_summary || []).filter((r) => (r.severity_level || 0) >= 2);
+            if (!regions.length) {
+                list.innerHTML = `
+                    <div class="region" style="border-left-color: rgba(39, 174, 96, 0.6);">
+                        <h3><span>No significant abnormalities detected</span><span class="severity sev-green">Green</span></h3>
+                        <p>The analyzed regions are mostly in low-severity ranges.</p>
+                    </div>
+                `;
+                return;
             }
 
-            // Executive summary
-            document.getElementById('summary-text').textContent = data.summary || 'Analysis complete.';
-            const confPct = Math.round((data.overall_confidence || 0) * 100);
-            const confWord = confPct >= 80 ? 'quite confident' : confPct >= 50 ? 'moderately confident' : 'less certain';
-            document.getElementById('confidence-note').textContent =
-                `We are ${confWord} about these findings (${confPct}% confidence). Your doctor will review these results with you.`;
+            list.innerHTML = regions.map((region) => {
+                const severity = region.severity_label || "GREEN";
+                const cls = severityClass[severity] || "sev-green";
+                const confidencePct = Math.round((region.confidence || 0) * 100);
+                return `
+                    <div class="region" style="border-left-color:${severity === "RED" ? "rgba(231,76,60,0.6)" : severity === "ORANGE" ? "rgba(230,126,34,0.6)" : "rgba(201,165,10,0.6)"};">
+                        <h3>
+                            <span>${region.anatomical_name || region.atlas_id}</span>
+                            <span class="severity ${cls}">${severity}</span>
+                        </h3>
+                        <p>${getRegionText(region.anatomical_name || region.atlas_id)}</p>
+                        <p style="margin-top:0.22rem; font-size:0.8rem; color:#607897;">Confidence: ${confidencePct}%</p>
+                    </div>
+                `;
+            }).join("");
+        }
 
-            // Render regions
-            const container = document.getElementById('regions-container');
-            container.innerHTML = '';
-            const damaged = (data.damage_summary || []).filter(r => r.severity_level >= 2);
-            const all = data.damage_summary || [];
+        async function loadReport() {
+            const scanId = inferScanId();
+            document.getElementById("scan-id").textContent = scanId;
+            document.getElementById("report-date").textContent = new Date().toLocaleDateString();
 
-            if (damaged.length === 0) {
-                container.innerHTML = '<p style="font-size: 16px; color: #27ae60; font-weight: 600;">Good news — no significant changes were found in the areas examined.</p>';
-            } else {
-                damaged.forEach(region => {
-                    const card = document.createElement('div');
-                    card.className = 'region-card';
-                    const func = getRegionFunction(region.anatomical_name);
-                    const patientLabel = SEVERITY_PATIENT_LABELS[region.severity_label] || region.severity_label;
-
-                    let meaning = '';
-                    if (region.severity_label === 'RED') {
-                        meaning = 'This means the change in this area is significant. Your doctor may want to discuss treatment options or further tests with you.';
-                    } else if (region.severity_label === 'ORANGE') {
-                        meaning = 'This means there is a noticeable change. Your doctor will likely want to monitor this or discuss it with you.';
-                    } else if (region.severity_label === 'YELLOW') {
-                        meaning = 'This means there is a small change. It may be something to keep an eye on, but it is not necessarily a cause for immediate concern.';
-                    }
-
-                    card.innerHTML = `
-                        <div class="region-header">
-                            <span class="region-name">${region.anatomical_name}</span>
-                            <span class="severity-badge severity-${region.severity_label}">${patientLabel}</span>
-                        </div>
-                        <div class="function">${func}</div>
-                        <div class="what-this-means">${meaning}</div>
-                        <div class="confidence-note">How sure we are: ${Math.round((region.confidence || 0) * 100)}%</div>
-                    `;
-                    container.appendChild(card);
-                });
-            }
-
-            // Render prognosis milestones
-            const progContainer = document.getElementById('prognosis-container');
-            progContainer.innerHTML = '';
-            if (data.prognosis && data.prognosis.milestones) {
-                data.prognosis.milestones.forEach(m => {
-                    const div = document.createElement('div');
-                    div.className = 'milestone';
-                    const minP = Math.round(m.probability_range[0] * 100);
-                    const maxP = Math.round(m.probability_range[1] * 100);
-                    div.innerHTML = `
-                        <div class="timeframe">${m.timeframe}</div>
-                        <div>
-                            <div>${m.milestone}</div>
-                            <div class="prob-bar"><div class="prob-fill" style="width: ${maxP}%"></div></div>
-                            <div class="prob-range">${minP}% – ${maxP}% likelihood</div>
-                        </div>
-                    `;
-                    progContainer.appendChild(div);
-                });
-            } else {
-                progContainer.innerHTML = '<p>Talk to your doctor about what to expect going forward. They can give you the most personalized guidance.</p>';
-            }
-
-            // Render recommendations
-            const recContainer = document.getElementById('recommendations-container');
-            recContainer.innerHTML = '';
-            if (data.recommendations && data.recommendations.length > 0) {
-                data.recommendations.forEach(rec => {
-                    const div = document.createElement('div');
-                    const isShortTerm = rec.timeframe === 'short_term';
-                    div.className = `recommendation ${isShortTerm ? 'short-term' : ''}`;
-                    div.innerHTML = `
-                        <div class="rec-label">${isShortTerm ? 'Near-term' : 'Long-term'}</div>
-                        <div>${rec.recommendation}</div>
-                    `;
-                    recContainer.appendChild(div);
-                });
-            } else {
-                recContainer.innerHTML = '<p>Please discuss next steps with your healthcare provider. They will create a plan that is right for you.</p>';
+            try {
+                const response = await fetch(`/report-data/${encodeURIComponent(scanId)}`);
+                if (!response.ok) throw new Error("Failed to fetch report data");
+                const data = await response.json();
+                render(data);
+            } catch (_) {
+                document.getElementById("summary-text").textContent = "Could not load detailed report content. Please try again later.";
             }
         }
 
-        // Auto-load from API if scan_id in URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const scanId = urlParams.get('scan_id');
-        if (scanId) {
-            fetch(`/report/${scanId}?mode=patient`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
-            })
-            .then(r => r.json())
-            .then(data => renderPatientReport(data))
-            .catch(e => {
-                document.getElementById('summary-text').textContent =
-                    'Could not load your report. Please try again or contact your healthcare provider.';
-            });
-        }
+        loadReport();
     </script>
 </body>
 </html>

@@ -64,6 +64,7 @@ setup(
         "click>=8.1",
         "numpy>=1.26",
         "scipy>=1.14",
+        "scikit-image>=0.24",
     ],
     extras_require={
         "dev": [

@@ -1,0 +1,51 @@
+governance:
+  schema_version: "1.0.0"
+
+  review:
+    auto_report_min_confidence: 0.82
+    second_read_min_confidence: 0.72
+    min_scan_quality_for_auto:
+      - "good"
+      - "excellent"
+    block_auto_if_synthetic_fallback: true
+    severe_region_escalation_threshold: 1
+    flagged_region_escalation_threshold: 4
+    high_risk_requires_escalation: true
+
+  uncertainty:
+    high_confidence_threshold: 0.9
+    moderate_confidence_threshold: 0.75
+    caution_threshold: 0.78
+
+  evidence:
+    max_cards: 5
+    min_region_severity: 2
+    min_region_confidence: 0.5
+
+  escalation:
+    tiers:
+      urgent:
+        notify_roles:
+          - "stroke_neurology"
+          - "neurosurgery"
+        expected_review_minutes: 30
+      priority:
+        notify_roles:
+          - "attending_neurology"
+        expected_review_minutes: 180
+      routine:
+        notify_roles:
+          - "assigned_clinician"
+        expected_review_minutes: 1440
+
+  signoff:
+    default_required_roles:
+      - "clinician"
+    second_reader_role: "second_clinician"
+    require_second_read_on:
+      - "requires_second_read"
+      - "urgent_escalation"
+
+  messaging:
+    clinician_notice: "AI findings are decision support and require clinician validation."
+    patient_notice: "Your care team reviews these AI findings before final decisions are made."

@@ -1,0 +1,582 @@
+﻿    <div class="shell">
+        <header class="topbar glass">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true"></div>
+                <div>
+                    <div class="brand-title">Brain_Scape Clinical Console</div>
+                    <p class="brand-subtitle">White-theme neuroradiology workspace with live AI analysis.</p>
+                </div>
+            </div>
+
+            <div class="topbar-actions">
+                <nav class="nav-links" aria-label="Primary navigation">
+                    <button id="nav-viewer" class="nav-link active" type="button">3D Viewer</button>
+                    <button id="nav-report" class="nav-link" type="button">Reports</button>
+                </nav>
+
+                <div class="auth-controls" role="group" aria-label="Authentication controls">
+                    <label for="auth-role" class="micro-label">Role</label>
+                    <select id="auth-role">
+                        <option value="clinician">Clinician</option>
+                        <option value="researcher">Researcher</option>
+                        <option value="patient">Patient</option>
+                    </select>
+                    <button class="btn btn-primary" id="btn-login" type="button">Sign In</button>
+                    <span id="auth-status" class="status-pill idle">Not authenticated</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <section class="viewer-stage glass">
+                <div class="viewer-head">
+                    <div>
+                        <h1>Interactive Cortical Map</h1>
+                        <p>Inspect anatomical involvement, confidence scores, and differential cues in a clinician-ready panel.</p>
+                    </div>
+                    <div class="viewer-badges">
+                        <span class="badge">Clinical Session</span>
+                        <span class="badge">Glassmorphism UI</span>
+                        <span class="badge" id="active-patient-badge">No sample selected</span>
+                    </div>
+                </div>
+
+                <div class="workflow-strip" aria-label="Clinical workflow progress">
+                    <div class="workflow-step" id="workflow-step-auth">
+                        <span class="workflow-index">1</span>
+                        <span>Sign In</span>
+                    </div>
+                    <div class="workflow-step" id="workflow-step-load">
+                        <span class="workflow-index">2</span>
+                        <span>Select Case</span>
+                    </div>
+                    <div class="workflow-step" id="workflow-step-analyze">
+                        <span class="workflow-index">3</span>
+                        <span>Analyze Scan</span>
+                    </div>
+                    <div class="workflow-step" id="workflow-step-verify">
+                        <span class="workflow-index">4</span>
+                        <span>Verify Findings</span>
+                    </div>
+                    <div class="workflow-step" id="workflow-step-report">
+                        <span class="workflow-index">5</span>
+                        <span>Finalize Report</span>
+                    </div>
+                </div>
+
+                <div class="viewer-toolbar">
+                    <div class="viewer-toolbar-actions">
+                        <button class="viewer-tool-btn" id="btn-view-reset" type="button">Reset View</button>
+                        <button class="viewer-tool-btn" id="btn-view-left" type="button">Left</button>
+                        <button class="viewer-tool-btn" id="btn-view-right" type="button">Right</button>
+                        <button class="viewer-tool-btn" id="btn-view-top" type="button">Top</button>
+                        <button class="viewer-tool-btn" id="btn-view-front" type="button">Front</button>
+                        <button class="viewer-tool-btn active" id="btn-projection-perspective" type="button">Perspective</button>
+                        <button class="viewer-tool-btn" id="btn-projection-orthographic" type="button">Orthographic</button>
+                        <button class="viewer-tool-btn active" id="btn-toggle-grid" type="button">Grid On</button>
+                        <button class="viewer-tool-btn active" id="btn-toggle-axes" type="button">Axes On</button>
+                        <button class="viewer-tool-btn" id="btn-auto-rotate" type="button">Auto Rotate Off</button>
+                        <button class="viewer-tool-btn active" id="btn-render-hybrid" type="button">Hybrid</button>
+                        <button class="viewer-tool-btn" id="btn-render-volume" type="button">Volume</button>
+                        <button class="viewer-tool-btn" id="btn-render-surface" type="button">Surface</button>
+                        <button class="viewer-tool-btn" id="btn-3d-measure" type="button">Measure Distance</button>
+                        <button class="viewer-tool-btn" id="btn-3d-measure-angle" type="button">Measure Angle</button>
+                        <button class="viewer-tool-btn" id="btn-3d-clear-measure" type="button">Clear Measure</button>
+                        <button class="viewer-tool-btn" id="btn-3d-bookmark" type="button">Lesion Bookmark</button>
+                        <button class="viewer-tool-btn" id="btn-3d-clear-bookmarks" type="button">Clear Bookmarks</button>
+                    </div>
+                    <label class="clip-control" for="clip-slider">
+                        Depth Clip
+                        <input id="clip-slider" type="range" min="0" max="100" value="0">
+                    </label>
+                </div>
+
+                <div class="viewer-kpis" aria-label="Clinical key metrics">
+                    <div class="kpi-card">
+                        <span class="kpi-label">Patient</span>
+                        <strong class="kpi-value" id="kpi-patient">No patient selected</strong>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Modality</span>
+                        <strong class="kpi-value" id="kpi-modality">-</strong>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Risk Band</span>
+                        <strong class="kpi-value low" id="kpi-risk">-</strong>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Flagged Regions</span>
+                        <strong class="kpi-value" id="kpi-regions">0</strong>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-label">Confidence</span>
+                        <strong class="kpi-value" id="kpi-confidence">-</strong>
+                    </div>
+                </div>
+
+                <div class="viewer-surface">
+                    <canvas id="brain-canvas" aria-label="3D brain viewer"></canvas>
+
+                    <div id="render-loader-overlay" class="render-loader-overlay" aria-live="polite">
+                        <div class="render-loader-card">
+                            <div class="render-loader-header">
+                                <span class="render-loader-spinner" aria-hidden="true"></span>
+                                <strong id="render-loader-title">Preparing 3D renderer</strong>
+                            </div>
+                            <div id="render-loader-detail" class="render-loader-detail">Initializing anatomical mapping pipeline...</div>
+                            <div class="render-loader-track">
+                                <div id="render-loader-progress" class="render-loader-progress"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="upload-overlay">
+                        <div class="upload-card" id="drop-zone">
+                            <h2>Load a neuro scan</h2>
+                            <p>MRI, fMRI, EEG, DTI, PET, DICOM, NIfTI, or scanned image input.</p>
+                            <div class="upload-actions">
+                                <button class="btn btn-primary" id="btn-upload" type="button">Upload Scan</button>
+                                <button class="btn btn-secondary" id="btn-demo" type="button">Load Selected Demo</button>
+                                <button class="btn btn-secondary" id="btn-download-sample" type="button">Download Upload Sample</button>
+                            </div>
+                            <p class="drop-hint">Tip: drag and drop files directly in this panel.</p>
+                        </div>
+                    </div>
+
+                    <div class="viewer-pick-info" id="viewer-pick-info">Click any cortical area in the 3D view to inspect the nearest affected region.</div>
+                    <div class="viewer-tool-output" id="viewer-tool-output">Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.</div>
+
+                    <div class="viewer-reference" id="viewer-reference" aria-live="polite">
+                        <div class="viewer-reference-row">
+                            <span>Projection</span>
+                            <strong id="viewer-projection-value">Perspective</strong>
+                        </div>
+                        <div class="viewer-reference-row">
+                            <span>Coordinates</span>
+                            <strong id="viewer-coordinate-value">x 0.0, y 0.0, z 0.0 mm</strong>
+                        </div>
+                        <div class="viewer-reference-row">
+                            <span>Measure Mode</span>
+                            <strong id="viewer-measure-mode-value">Distance</strong>
+                        </div>
+                    </div>
+
+                    <div class="viewer-insights" id="viewer-insights" aria-live="polite">
+                        <div class="viewer-insights-head">
+                            <span>Key Insights</span>
+                            <span id="viewer-insights-risk" class="risk-chip low">n/a</span>
+                        </div>
+                        <div id="viewer-insights-list" class="viewer-insights-list">
+                            <div class="insight-item muted">Load a scan to view top neurological findings and confidence context.</div>
+                        </div>
+                    </div>
+
+                    <div class="viewer-bookmarks" id="viewer-bookmarks">
+                        <div class="region-item muted">No lesion bookmarks yet.</div>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="side-panel">
+                <div class="panel-mode-switch glass" role="tablist" aria-label="Panel focus mode">
+                    <button class="panel-mode-btn active" type="button" data-panel-mode="all">All</button>
+                    <button class="panel-mode-btn" type="button" data-panel-mode="worklist">Worklist</button>
+                    <button class="panel-mode-btn" type="button" data-panel-mode="findings">Findings</button>
+                    <button class="panel-mode-btn" type="button" data-panel-mode="dicom">DICOM</button>
+                    <button class="panel-mode-btn" type="button" data-panel-mode="planning">Planning</button>
+                </div>
+
+                <section class="panel-card glass" data-panel-group="worklist">
+                    <div class="section-title">Patient Samples</div>
+                    <div class="patient-controls">
+                        <input id="patient-search" class="patient-search" type="text" placeholder="Search by name, code, concern">
+                        <select id="patient-risk-filter" class="patient-filter">
+                            <option value="all">All risk</option>
+                            <option value="high">High</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="new-patient-form" id="new-patient-form">
+                        <input id="new-patient-name" class="patient-search" type="text" placeholder="New patient name">
+                        <input id="new-patient-age" class="patient-search" type="number" min="0" max="120" placeholder="Age">
+                        <select id="new-patient-sex" class="patient-filter">
+                            <option value="F">Female</option>
+                            <option value="M">Male</option>
+                            <option value="O">Other</option>
+                        </select>
+                        <select id="new-patient-modality" class="patient-filter">
+                            <option value="MRI_T1">MRI T1</option>
+                            <option value="fMRI">fMRI</option>
+                            <option value="DTI">DTI</option>
+                            <option value="EEG">EEG</option>
+                        </select>
+                        <input id="new-patient-concern" class="patient-search" type="text" placeholder="Primary concern">
+                        <button class="btn btn-primary" id="btn-create-patient" type="button">Create Patient</button>
+                    </div>
+                    <div class="patient-list" id="patient-list">
+                        <div class="region-item muted">Loading sample patients...</div>
+                    </div>
+                    <div class="action-buttons" style="margin-top:0.55rem;">
+                        <button class="btn btn-primary" id="btn-load-patient" type="button">Load Selected Patient</button>
+                        <button class="btn btn-secondary" id="btn-random-patient" type="button">Random Case</button>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="findings">
+                    <div class="section-title">Damage Scale</div>
+                    <div class="severity-legend">
+                        <div class="severity-item"><span class="severity-dot" style="background:#4A90D9"></span>Not implicated</div>
+                        <div class="severity-item"><span class="severity-dot" style="background:#27AE60"></span>Healthy</div>
+                        <div class="severity-item"><span class="severity-dot" style="background:#F1C40F"></span>Mild</div>
+                        <div class="severity-item"><span class="severity-dot" style="background:#E67E22"></span>Moderate</div>
+                        <div class="severity-item"><span class="severity-dot" style="background:#E74C3C"></span>Severe</div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="findings">
+                    <div class="section-title">Severity Filters</div>
+                    <div id="severity-toggles" class="severity-grid">
+                        <label class="severity-toggle"><input type="checkbox" checked data-level="0"><span class="toggle-dot" style="background:#4A90D9"></span><span>Not implicated</span></label>
+                        <label class="severity-toggle"><input type="checkbox" checked data-level="1"><span class="toggle-dot" style="background:#27AE60"></span><span>Healthy</span></label>
+                        <label class="severity-toggle"><input type="checkbox" checked data-level="2"><span class="toggle-dot" style="background:#F1C40F"></span><span>Mild</span></label>
+                        <label class="severity-toggle"><input type="checkbox" checked data-level="3"><span class="toggle-dot" style="background:#E67E22"></span><span>Moderate</span></label>
+                        <label class="severity-toggle"><input type="checkbox" checked data-level="4"><span class="toggle-dot" style="background:#E74C3C"></span><span>Severe</span></label>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="findings">
+                    <div class="section-title">Affected Regions</div>
+                    <div class="region-list" id="region-list">
+                        <div class="region-item muted">Load a scan to populate anatomical findings.</div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="findings">
+                    <div class="section-title">Differential Diagnosis</div>
+                    <div id="differential-diagnosis" class="diagnosis-list">
+                        <div class="diag-muted">Run a scan to view ranked diagnostic hypotheses.</div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Case Snapshot</div>
+                    <div class="snapshot-grid">
+                        <div class="snapshot-field">
+                            <span>Patient</span>
+                            <strong id="snapshot-name">No patient selected</strong>
+                        </div>
+                        <div class="snapshot-field">
+                            <span>Scan</span>
+                            <strong id="snapshot-scan">-</strong>
+                        </div>
+                        <div class="snapshot-field">
+                            <span>Modality</span>
+                            <strong id="snapshot-modality">-</strong>
+                        </div>
+                        <div class="snapshot-field">
+                            <span>Risk Band</span>
+                            <strong id="snapshot-risk" class="snapshot-risk low">-</strong>
+                        </div>
+                    </div>
+                    <div class="snapshot-summary" id="snapshot-summary">Choose one of the sample patients to preview findings and trend context before loading the full viewer.</div>
+                    <div class="snapshot-stats" id="snapshot-stats">
+                        <span class="snapshot-pill">No active findings</span>
+                    </div>
+                    <div class="timeline-head">Timeline</div>
+                    <div class="timeline-list" id="timeline-list">
+                        <div class="region-item muted">Load sample patient history to inspect longitudinal changes.</div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Clinical Readiness</div>
+                    <div class="readiness-grid">
+                        <div class="readiness-item" id="readiness-auth">
+                            <span class="readiness-dot"></span>
+                            <div>
+                                <strong>Access and Consent</strong>
+                                <span class="readiness-value">Authentication pending.</span>
+                            </div>
+                        </div>
+                        <div class="readiness-item" id="readiness-scan">
+                            <span class="readiness-dot"></span>
+                            <div>
+                                <strong>Scan Availability</strong>
+                                <span class="readiness-value">No active scan loaded.</span>
+                            </div>
+                        </div>
+                        <div class="readiness-item" id="readiness-findings">
+                            <span class="readiness-dot"></span>
+                            <div>
+                                <strong>Findings Review</strong>
+                                <span class="readiness-value">Awaiting reviewed anatomical findings.</span>
+                            </div>
+                        </div>
+                        <div class="readiness-item" id="readiness-dicom">
+                            <span class="readiness-dot"></span>
+                            <div>
+                                <strong>DICOM Verification</strong>
+                                <span class="readiness-value">DICOM workstation not initialized.</span>
+                            </div>
+                        </div>
+                        <div class="readiness-item" id="readiness-export">
+                            <span class="readiness-dot"></span>
+                            <div>
+                                <strong>Report and Export</strong>
+                                <span class="readiness-value">Report view unavailable until scan load.</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Governance and Sign-off</div>
+                    <div class="gov-grid">
+                        <div class="gov-card">
+                            <div class="gov-label">Decision Tier</div>
+                            <div class="gov-value" id="gov-decision-tier">not evaluated</div>
+                        </div>
+                        <div class="gov-card">
+                            <div class="gov-label">Review State</div>
+                            <div class="gov-value" id="gov-review-state">review pending</div>
+                        </div>
+                        <div class="gov-card">
+                            <div class="gov-label">Automation</div>
+                            <div class="gov-value" id="gov-automation">manual review</div>
+                        </div>
+                        <div class="gov-card">
+                            <div class="gov-label">Escalation</div>
+                            <div class="gov-value" id="gov-escalation">routine</div>
+                        </div>
+                    </div>
+                    <div class="gov-note" id="gov-provenance">Provenance details are unavailable until a scan is loaded.</div>
+                    <div class="gov-note" id="gov-message">AI output is decision support and must be validated by the care team.</div>
+                    <div class="gov-note" id="gov-required-signoff">Required sign-off roles: clinician</div>
+                    <div class="gov-list" id="gov-evidence-list">
+                        <div class="gov-item muted">Evidence cards appear after loading a scan.</div>
+                    </div>
+                    <div class="gov-list" id="gov-signoff-list">
+                        <div class="gov-item muted">No sign-off activity recorded yet.</div>
+                    </div>
+                    <div class="action-buttons gov-actions">
+                        <button class="btn btn-primary" id="btn-signoff-approve" type="button">Approve</button>
+                        <button class="btn btn-secondary" id="btn-signoff-second-read" type="button">Second Read</button>
+                        <button class="btn btn-secondary" id="btn-signoff-escalate" type="button">Escalate</button>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Case Intelligence</div>
+                    <div class="compare-controls">
+                        <select id="compare-patient-select" class="patient-filter" aria-label="Compare with patient">
+                            <option value="">Select patient for comparison</option>
+                        </select>
+                        <select id="compare-left-scan" class="patient-filter" aria-label="Left scan">
+                            <option value="">Auto previous scan</option>
+                        </select>
+                        <select id="compare-right-scan" class="patient-filter" aria-label="Right scan">
+                            <option value="">Auto current scan</option>
+                        </select>
+                    </div>
+                    <div class="action-buttons" style="margin-top:0.52rem;">
+                        <button class="btn btn-primary" id="btn-compare-cases" type="button">Compare Cases</button>
+                        <button class="btn btn-secondary" id="btn-load-high-risk" type="button">Load Highest Risk</button>
+                    </div>
+                    <div class="compare-side-grid" id="compare-side-grid">
+                        <div class="compare-side-card">
+                            <div class="compare-side-title">Baseline Scan</div>
+                            <div class="compare-side-value" id="compare-left-summary">Waiting for scan selection.</div>
+                        </div>
+                        <div class="compare-side-card">
+                            <div class="compare-side-title">Current Scan</div>
+                            <div class="compare-side-value" id="compare-right-summary">Waiting for scan selection.</div>
+                        </div>
+                    </div>
+                    <div id="compare-output" class="compare-output">Comparison output appears here once two cases are selected.</div>
+                    <div id="longitudinal-delta-output" class="longitudinal-summary">Automatic progression/regression metrics will appear after loading a patient with timeline data.</div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Critical Structures</div>
+                    <div class="structure-toggle-row" id="critical-structure-toggles">
+                        <label class="structure-toggle"><input type="checkbox" data-structure="speech" checked>Speech</label>
+                        <label class="structure-toggle"><input type="checkbox" data-structure="motor" checked>Motor</label>
+                        <label class="structure-toggle"><input type="checkbox" data-structure="visual" checked>Visual</label>
+                        <label class="structure-toggle"><input type="checkbox" data-structure="vascular" checked>Vascular</label>
+                    </div>
+                    <div id="critical-distance-list" class="proximity-list">Load a case to compute lesion proximity to eloquent structures and vessels.</div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Trajectory Planner</div>
+                    <div class="trajectory-controls">
+                        <button class="dicom-btn" id="btn-plan-entry" type="button">Set Entry Point</button>
+                        <button class="dicom-btn" id="btn-plan-target" type="button">Set Target Point</button>
+                        <button class="dicom-btn" id="btn-plan-compute" type="button">Compute Trajectory</button>
+                        <button class="dicom-btn" id="btn-plan-clear" type="button">Clear Trajectory</button>
+                    </div>
+                    <div id="trajectory-output" class="trajectory-output">Choose entry and target points from 3D view, then compute risk-aware approach path.</div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="dicom">
+                    <div class="section-title">DICOM Workstation</div>
+                    <div class="dicom-meta" id="dicom-meta">Load a sample patient to initialize professional DICOM tools.</div>
+                    <select id="dicom-series-select" class="patient-filter" aria-label="DICOM series">
+                        <option value="">No DICOM series loaded</option>
+                    </select>
+                    <div class="dicom-canvas-wrap" style="margin-top:0.5rem;">
+                        <canvas id="dicom-canvas" class="dicom-canvas" width="256" height="256" aria-label="DICOM viewport"></canvas>
+                    </div>
+                    <div class="dicom-plane-row">
+                        <button class="dicom-btn dicom-plane-btn active" data-plane="axial" type="button">Axial</button>
+                        <button class="dicom-btn dicom-plane-btn" data-plane="coronal" type="button">Coronal</button>
+                        <button class="dicom-btn dicom-plane-btn" data-plane="sagittal" type="button">Sagittal</button>
+                    </div>
+                    <div class="dicom-row">
+                        <div class="dicom-label-row">
+                            <span>Slice</span>
+                            <strong id="dicom-slice-value">1 / 1</strong>
+                        </div>
+                        <input class="dicom-slider" id="dicom-slice-slider" type="range" min="1" max="1" value="1">
+                    </div>
+                    <div class="dicom-row">
+                        <div class="dicom-label-row">
+                            <span>Window Width (contrast)</span>
+                            <strong id="dicom-ww-value">80</strong>
+                        </div>
+                        <input class="dicom-slider" id="dicom-ww-slider" type="range" min="20" max="3200" value="80">
+                    </div>
+                    <div class="dicom-row">
+                        <div class="dicom-label-row">
+                            <span>Window Center (brightness)</span>
+                            <strong id="dicom-wc-value">40</strong>
+                        </div>
+                        <input class="dicom-slider" id="dicom-wc-slider" type="range" min="-200" max="1200" value="40">
+                    </div>
+                    <div class="dicom-preset-row">
+                        <button class="dicom-btn dicom-preset-btn active" data-preset="brain" type="button">Brain</button>
+                        <button class="dicom-btn dicom-preset-btn" data-preset="stroke" type="button">Stroke</button>
+                        <button class="dicom-btn dicom-preset-btn" data-preset="subdural" type="button">Subdural</button>
+                        <button class="dicom-btn dicom-preset-btn" data-preset="bone" type="button">Bone</button>
+                    </div>
+                    <div class="dicom-actions">
+                        <button class="dicom-btn" id="dicom-toggle-cine" type="button">Start Cine</button>
+                        <button class="dicom-btn" id="dicom-toggle-invert" type="button">Invert Off</button>
+                        <button class="dicom-btn active" id="dicom-toggle-crosshair" type="button">Crosshair On</button>
+                        <button class="dicom-btn" id="dicom-toggle-measure" type="button">Measure Off</button>
+                        <button class="dicom-btn" id="dicom-clear-measure" type="button">Clear Measure</button>
+                    </div>
+                    <div class="dicom-measure-tools">
+                        <button class="dicom-btn dicom-measure-tool active" data-tool="distance" type="button">Distance</button>
+                        <button class="dicom-btn dicom-measure-tool" data-tool="angle" type="button">Angle</button>
+                        <button class="dicom-btn dicom-measure-tool" data-tool="area" type="button">Area</button>
+                    </div>
+                    <div class="dicom-readout" id="dicom-measure-output">Measure mode off. Enable Measure and select Distance, Angle, or Area.</div>
+                    <div class="tri-planar-head">Tri-Planar Fusion Workspace</div>
+                    <div class="tri-planar-grid" id="tri-planar-grid">
+                        <div class="tri-planar-cell">
+                            <div class="tri-plane-label">Axial</div>
+                            <canvas id="tri-canvas-axial" class="tri-canvas" width="224" height="224" data-plane="axial" aria-label="Axial fusion viewport"></canvas>
+                        </div>
+                        <div class="tri-planar-cell">
+                            <div class="tri-plane-label">Coronal</div>
+                            <canvas id="tri-canvas-coronal" class="tri-canvas" width="224" height="224" data-plane="coronal" aria-label="Coronal fusion viewport"></canvas>
+                        </div>
+                        <div class="tri-planar-cell">
+                            <div class="tri-plane-label">Sagittal</div>
+                            <canvas id="tri-canvas-sagittal" class="tri-canvas" width="224" height="224" data-plane="sagittal" aria-label="Sagittal fusion viewport"></canvas>
+                        </div>
+                    </div>
+                    <div class="dicom-context-row">
+                        <select id="dicom-context-select" class="patient-filter" aria-label="Context preset">
+                            <option value="auto">Auto Context</option>
+                            <option value="brain">Brain Routine</option>
+                            <option value="stroke">Stroke Fast</option>
+                            <option value="flair">MRI FLAIR</option>
+                            <option value="subdural">Subdural</option>
+                            <option value="bone">Bone Window</option>
+                            <option value="vascular">Vascular CTA/MRA</option>
+                        </select>
+                        <button class="dicom-btn" id="dicom-apply-context" type="button">Apply Context WL</button>
+                        <button class="dicom-btn active" id="dicom-toggle-linked-nav" type="button">Linked Nav On</button>
+                        <button class="dicom-btn" id="dicom-sync-to-3d" type="button">Center 3D on Crosshair</button>
+                    </div>
+                    <div class="seg-tools-grid three">
+                        <button class="dicom-btn active" id="seg-toggle-lesion" type="button">Lesion Overlay On</button>
+                        <button class="dicom-btn active" id="seg-toggle-edema" type="button">Edema Overlay On</button>
+                        <button class="dicom-btn active" id="seg-toggle-uncertainty" type="button">Uncertainty On</button>
+                    </div>
+                    <div class="seg-tools-grid">
+                        <select id="seg-class-select" class="patient-filter" aria-label="Segmentation class">
+                            <option value="lesion">Edit Lesion Mask</option>
+                            <option value="edema">Edit Edema Mask</option>
+                        </select>
+                        <button class="dicom-btn" id="seg-toggle-edit" type="button">Edit Mode Off</button>
+                        <button class="dicom-btn active" id="seg-tool-brush" type="button">Brush</button>
+                        <button class="dicom-btn" id="seg-tool-erase" type="button">Erase</button>
+                    </div>
+                    <div class="dicom-row">
+                        <div class="dicom-label-row">
+                            <span>Segmentation Brush Radius</span>
+                            <strong id="seg-brush-size-value">2 px</strong>
+                        </div>
+                        <input class="dicom-slider" id="seg-brush-size" type="range" min="1" max="12" value="2">
+                    </div>
+                    <div class="seg-tools-grid">
+                        <button class="dicom-btn" id="btn-estimate-volume" type="button">Estimate Lesion Volume</button>
+                        <button class="dicom-btn" id="btn-refresh-longitudinal" type="button">Refresh Longitudinal Delta</button>
+                    </div>
+                    <div id="segmentation-volume-output" class="segmentation-summary">Segmentation volumes will appear after loading a case.</div>
+                    <div class="compact-note">Tip: In tri-planar canvases click to navigate. Toggle Edit Mode to paint lesion/edema corrections.</div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Clinical Q&A</div>
+                    <div class="qa-section">
+                        <input type="text" class="qa-input" id="qa-input" placeholder="Example: Is this pattern associated with language deficits?">
+                        <div class="qa-response" id="qa-response" style="display:none;"></div>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Detailed Report Metrics</div>
+                    <div id="report-metrics-grid" class="report-metrics-grid">
+                        <div class="region-item muted">Load a scan to generate quantitative report metrics.</div>
+                    </div>
+                    <div id="report-narrative" class="report-narrative">Detailed clinical narrative appears after report generation.</div>
+                    <div class="action-buttons" style="margin-top:0.5rem;">
+                        <button class="btn btn-primary" id="btn-generate-report" type="button">Generate Detailed Report</button>
+                        <button class="btn btn-secondary" id="btn-export-package" type="button">Export Case Package</button>
+                    </div>
+                </section>
+
+                <section class="panel-card glass" data-panel-group="planning">
+                    <div class="section-title">Exports</div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="btn-export-glb" type="button">Export GLB</button>
+                        <button class="btn btn-secondary" id="btn-export-report" type="button">Open Report</button>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <footer class="status-bar glass">
+            <div class="status-main">
+                <span id="status-text">Ready. Authenticate and load a scan to begin analysis.</span>
+                <div id="loader-panel" class="loader-panel">
+                    <div class="loader-meta">
+                        <span id="loader-stage">Waiting</span>
+                        <span id="loader-eta">ETA --</span>
+                    </div>
+                    <div class="loader-track">
+                        <div id="loader-progress" class="loader-progress"></div>
+                    </div>
+                </div>
+            </div>
+            <span id="job-info">No active job</span>
+        </footer>
+    </div>
+
+    <input type="file" id="file-input" style="display:none" accept=".nii,.nii.gz,.dcm,.dicom,.nifti,.mgh,.mgz,.eeg,.edf,.bdf,.set,.fdt,.pdf,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,image/png,image/jpeg,image/tiff">
+

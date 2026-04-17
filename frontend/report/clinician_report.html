@@ -3,109 +3,566 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brain_Scape — Clinical Report</title>
+    <title>Brain_Scape Clinician Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        @page { size: A4; margin: 2cm; }
-        body { font-family: 'Times New Roman', serif; font-size: 11pt; line-height: 1.5; color: #1a1a1a; max-width: 210mm; margin: 0 auto; padding: 2rem; }
-        h1 { font-size: 18pt; color: #1a3a6e; border-bottom: 2px solid #1a3a6e; padding-bottom: 0.3rem; }
-        h2 { font-size: 14pt; color: #2a4a8e; margin-top: 1.5rem; }
-        h3 { font-size: 12pt; color: #3a5a9e; }
-        table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-        th, td { border: 1px solid #ccc; padding: 0.3rem 0.5rem; text-align: left; font-size: 10pt; }
-        th { background: #e8f0f8; font-weight: bold; }
-        .severity-severe { color: #E74C3C; font-weight: bold; }
-        .severity-moderate { color: #E67E22; }
-        .severity-mild { color: #D4AC0D; }
-        .severity-healthy { color: #27AE60; }
-        .confidence { font-size: 9pt; color: #666; }
-        .header-info { display: flex; justify-content: space-between; font-size: 9pt; color: #666; margin-bottom: 1rem; }
-        .disclaimer { font-size: 8pt; color: #999; border-top: 1px solid #ccc; padding-top: 0.5rem; margin-top: 2rem; }
-        .section { margin: 1rem 0; }
-        .finding { margin: 0.3rem 0; padding: 0.3rem 0.5rem; background: #f8f9fa; border-left: 3px solid #2a4a8e; }
-        .citation { font-size: 9pt; color: #555; }
+        :root {
+            --ink-900: #10253f;
+            --ink-700: #2f486d;
+            --ink-500: #657e9f;
+            --surface: rgba(255, 255, 255, 0.82);
+            --surface-strong: rgba(255, 255, 255, 0.92);
+            --line-soft: rgba(255, 255, 255, 0.92);
+            --accent: #1f77b4;
+            --accent-2: #3ea6df;
+            --shadow: 0 18px 36px rgba(19, 42, 72, 0.14);
+            --radius-xl: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Source Sans 3", "Segoe UI", sans-serif;
+            color: var(--ink-900);
+            background:
+                radial-gradient(circle at 8% 12%, rgba(145, 191, 228, 0.24), transparent 36%),
+                radial-gradient(circle at 90% 6%, rgba(148, 215, 215, 0.2), transparent 28%),
+                linear-gradient(165deg, #eff5fc, #f8fbff);
+            min-height: 100vh;
+            padding: 1.1rem;
+        }
+
+        .report-shell {
+            max-width: 1180px;
+            margin: 0 auto;
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .glass {
+            background: var(--surface);
+            border: 1px solid var(--line-soft);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+
+        .report-header {
+            padding: 1rem 1.2rem;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 0.8rem;
+            align-items: center;
+            animation: fade-up 0.5s ease both;
+        }
+
+        .report-title {
+            font-family: "Sora", sans-serif;
+            font-size: 1.35rem;
+            font-weight: 680;
+            letter-spacing: 0.01em;
+        }
+
+        .report-subtitle {
+            color: var(--ink-500);
+            margin-top: 0.24rem;
+            font-size: 0.92rem;
+        }
+
+        .report-meta {
+            display: grid;
+            gap: 0.35rem;
+            justify-items: end;
+            font-size: 0.83rem;
+            color: var(--ink-700);
+        }
+
+        .report-meta strong {
+            font-weight: 650;
+            color: var(--ink-900);
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 300px;
+            gap: 0.9rem;
+        }
+
+        .stack {
+            display: grid;
+            gap: 0.9rem;
+        }
+
+        .card {
+            padding: 0.9rem;
+            background: var(--surface-strong);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            border-radius: var(--radius-md);
+            animation: fade-up 0.58s ease both;
+        }
+
+        .card h2 {
+            font-family: "Sora", sans-serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ink-500);
+            margin-bottom: 0.62rem;
+            font-weight: 650;
+        }
+
+        .summary {
+            line-height: 1.55;
+            font-size: 0.94rem;
+            color: var(--ink-700);
+        }
+
+        .summary strong {
+            color: var(--ink-900);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.86rem;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            border: 1px solid rgba(212, 227, 245, 0.85);
+        }
+
+        thead th {
+            background: rgba(226, 238, 251, 0.72);
+            color: var(--ink-700);
+            text-align: left;
+            font-weight: 650;
+            font-size: 0.79rem;
+            letter-spacing: 0.03em;
+            padding: 0.48rem 0.52rem;
+            text-transform: uppercase;
+        }
+
+        tbody td {
+            padding: 0.48rem 0.52rem;
+            border-top: 1px solid rgba(220, 233, 248, 0.72);
+            color: var(--ink-700);
+            vertical-align: top;
+        }
+
+        tbody tr:first-child td {
+            border-top: 0;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 0.22rem 0.52rem;
+            text-transform: uppercase;
+        }
+
+        .sev-red { background: rgba(231, 76, 60, 0.16); color: #a03325; }
+        .sev-orange { background: rgba(230, 126, 34, 0.16); color: #9b5518; }
+        .sev-yellow { background: rgba(241, 196, 15, 0.22); color: #795f09; }
+        .sev-green { background: rgba(39, 174, 96, 0.2); color: #1f7b45; }
+        .sev-blue { background: rgba(74, 144, 217, 0.2); color: #245f98; }
+
+        .kpi-grid {
+            display: grid;
+            gap: 0.56rem;
+        }
+
+        .kpi {
+            padding: 0.62rem;
+            border-radius: 12px;
+            border: 1px solid rgba(218, 232, 248, 0.8);
+            background: rgba(255, 255, 255, 0.82);
+        }
+
+        .kpi-label {
+            color: var(--ink-500);
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+        }
+
+        .kpi-value {
+            margin-top: 0.22rem;
+            color: var(--ink-900);
+            font-family: "Sora", sans-serif;
+            font-size: 1rem;
+            font-weight: 640;
+        }
+
+        .finding {
+            padding: 0.54rem 0.62rem;
+            border-left: 3px solid rgba(53, 128, 191, 0.58);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.72);
+            font-size: 0.85rem;
+            color: var(--ink-700);
+            line-height: 1.45;
+            margin-bottom: 0.48rem;
+        }
+
+        .governance-grid {
+            display: grid;
+            gap: 0.48rem;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .gov-evidence {
+            margin-top: 0.52rem;
+            display: grid;
+            gap: 0.42rem;
+        }
+
+        .gov-evidence-item {
+            border-left: 3px solid rgba(53, 128, 191, 0.58);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.72);
+            padding: 0.5rem 0.6rem;
+            color: var(--ink-700);
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .signoff-list {
+            margin-top: 0.56rem;
+            display: grid;
+            gap: 0.42rem;
+        }
+
+        .disclaimer {
+            padding: 0.78rem 0.92rem;
+            border-radius: 12px;
+            background: rgba(255, 243, 224, 0.8);
+            border: 1px solid rgba(255, 212, 161, 0.86);
+            color: #7c4f11;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .disclaimer strong {
+            display: block;
+            margin-bottom: 0.2rem;
+            font-family: "Sora", sans-serif;
+            color: #8a510f;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            padding: 0.7rem 0;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 999px;
+            padding: 0.46rem 0.8rem;
+            cursor: pointer;
+            font-family: "Sora", sans-serif;
+            font-size: 0.8rem;
+            font-weight: 650;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 10px 18px rgba(43, 129, 199, 0.32);
+        }
+
+        .btn-secondary {
+            color: var(--ink-700);
+            border: 1px solid rgba(189, 208, 232, 0.82);
+            background: rgba(255, 255, 255, 0.88);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        @keyframes fade-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+                padding: 0;
+            }
+
+            .glass,
+            .card {
+                backdrop-filter: none;
+                box-shadow: none;
+                background: #ffffff;
+                border: 1px solid #d8e4f3;
+            }
+
+            .actions {
+                display: none;
+            }
+        }
+
+        @media (max-width: 980px) {
+            .report-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .report-header {
+                grid-template-columns: 1fr;
+            }
+
+            .report-meta {
+                justify-items: start;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header-info">
-        <span>Brain_Scape — Clinical Neuroimaging Report</span>
-        <span id="report-date">Generated: {{date}}</span>
-    </div>
+    <main class="report-shell">
+        <header class="report-header glass">
+            <div>
+                <div class="report-title">Brain_Scape Clinician Report</div>
+                <p class="report-subtitle">Structured neuroimaging findings for neurologist and radiology review.</p>
+            </div>
+            <div class="report-meta">
+                <div><strong>Scan ID:</strong> <span id="scan-id">N/A</span></div>
+                <div><strong>Generated:</strong> <span id="report-date">N/A</span></div>
+                <div><strong>Mode:</strong> Clinician</div>
+            </div>
+        </header>
 
-    <h1>Brain_Scape Clinical Report</h1>
+        <section class="report-grid">
+            <div class="stack">
+                <article class="card">
+                    <h2>Executive Summary</h2>
+                    <p id="executive-summary" class="summary">Awaiting analysis payload. Once available, this section summarizes key neurological findings, lateralization, and dominant pathology signals.</p>
+                </article>
 
-    <div class="section">
-        <h2>Scan Information</h2>
-        <table>
-            <tr><td><strong>Scan ID:</strong></td><td id="scan-id">{{scan_id}}</td></tr>
-            <tr><td><strong>Modality:</strong></td><td id="modality">{{modalities}}</td></tr>
-            <tr><td><strong>Atlas:</strong></td><td id="atlas">{{atlas}}</td></tr>
-            <tr><td><strong>Overall Confidence:</strong></td><td id="confidence">{{overall_confidence}}</td></tr>
-            <tr><td><strong>Scan Quality:</strong></td><td id="quality">{{scan_quality}}</td></tr>
-        </table>
-    </div>
+                <article class="card">
+                    <h2>Damage Assessment</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Region</th>
+                                <th>Severity</th>
+                                <th>Confidence</th>
+                                <th>Volume (mm3)</th>
+                                <th>% Region</th>
+                            </tr>
+                        </thead>
+                        <tbody id="damage-table">
+                            <tr>
+                                <td colspan="5" style="text-align:center; color:#6d84a5;">No region-level findings loaded.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </article>
 
-    <div class="section">
-        <h2>Executive Summary</h2>
-        <p id="executive-summary">{{executive_summary}}</p>
-    </div>
+                <article class="card">
+                    <h2>Detailed Findings</h2>
+                    <div id="findings-list">
+                        <div class="finding">No findings loaded. Connect this report to an available scan payload to populate automated interpretation text.</div>
+                    </div>
+                </article>
+            </div>
 
-    <div class="section">
-        <h2>Damage Assessment</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Region</th>
-                    <th>Severity</th>
-                    <th>Confidence</th>
-                    <th>Volume (mm&sup3;)</th>
-                    <th>% of Region</th>
-                </tr>
-            </thead>
-            <tbody id="damage-table">
-                <tr>
-                    <td colspan="5" style="text-align:center;color:#999;">Upload a scan to populate this report</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+            <aside class="stack">
+                <article class="card">
+                    <h2>Scan Metadata</h2>
+                    <div class="kpi-grid">
+                        <div class="kpi">
+                            <div class="kpi-label">Modality</div>
+                            <div class="kpi-value" id="meta-modality">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Atlas</div>
+                            <div class="kpi-value" id="meta-atlas">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Overall Confidence</div>
+                            <div class="kpi-value" id="meta-confidence">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Scan Quality</div>
+                            <div class="kpi-value" id="meta-quality">N/A</div>
+                        </div>
+                    </div>
+                </article>
 
-    <div class="section">
-        <h2>Differential Diagnosis</h2>
-        <div id="differential-diagnosis">
-            <p style="color:#999;">Differential diagnosis requires the classification engine.</p>
+                <article class="card">
+                    <h2>Methodology Snapshot</h2>
+                    <div class="finding">Segmentation: nnU-Net v2 with fallback heuristics.</div>
+                    <div class="finding">Severity scale: BLUE, GREEN, YELLOW, ORANGE, RED.</div>
+                    <div class="finding">Confidence: weighted quality, model consistency, and registration integrity.</div>
+                </article>
+
+                <article class="card">
+                    <h2>Clinical Governance</h2>
+                    <div class="governance-grid">
+                        <div class="kpi">
+                            <div class="kpi-label">Decision Tier</div>
+                            <div class="kpi-value" id="meta-decision-tier">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Review State</div>
+                            <div class="kpi-value" id="meta-review-state">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Automation</div>
+                            <div class="kpi-value" id="meta-automation">N/A</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="kpi-label">Escalation</div>
+                            <div class="kpi-value" id="meta-escalation">N/A</div>
+                        </div>
+                    </div>
+                    <div class="finding" id="meta-provenance">Provenance details will appear once report data is loaded.</div>
+                    <div class="gov-evidence" id="evidence-list">
+                        <div class="gov-evidence-item">Evidence cards will appear for moderate/severe regions.</div>
+                    </div>
+                    <div class="signoff-list" id="signoff-list">
+                        <div class="gov-evidence-item">No sign-off events recorded for this case.</div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <h2>Clinical Note</h2>
+                    <div class="disclaimer">
+                        <strong>Decision Support Notice</strong>
+                        AI output should complement, not replace, physician interpretation. Correlate with examination, history, and additional imaging where indicated.
+                    </div>
+                </article>
+            </aside>
+        </section>
+
+        <div class="actions">
+            <button class="btn btn-secondary" type="button" onclick="window.close()">Close</button>
+            <button class="btn btn-primary" type="button" onclick="window.print()">Print Report</button>
         </div>
-    </div>
+    </main>
 
-    <div class="section">
-        <h2>Connectivity Disruption</h2>
-        <div id="connectivity">
-            <p style="color:#999;">Connectivity analysis requires DTI or fMRI data.</p>
-        </div>
-    </div>
+    <script>
+        const severityClass = {
+            RED: "sev-red",
+            ORANGE: "sev-orange",
+            YELLOW: "sev-yellow",
+            GREEN: "sev-green",
+            BLUE: "sev-blue",
+        };
 
-    <div class="section">
-        <h2>Detailed Findings</h2>
-        <div id="detailed-findings">
-            <p style="color:#999;">Detailed LLM-generated findings will appear here.</p>
-        </div>
-    </div>
+        function inferScanId() {
+            const pathParts = window.location.pathname.split("/").filter(Boolean);
+            return pathParts.length ? pathParts[pathParts.length - 1] : "N/A";
+        }
 
-    <div class="section">
-        <h2>Methodology</h2>
-        <p>This report was generated by Brain_Scape, a neuro-imaging intelligence platform.</p>
-        <ul>
-            <li><strong>Segmentation:</strong> nnU-Net v2 (3d_fullres)</li>
-            <li><strong>Classification:</strong> 5-level severity scale (BLUE/GREEN/YELLOW/ORANGE/RED)</li>
-            <li><strong>Confidence:</strong> 3-component weighted model (ensemble agreement + scan quality + registration accuracy)</li>
-            <li><strong>Atlas:</strong> AAL3 / Brodmann / Desikan-Killiany</li>
-        </ul>
-    </div>
+        function setMeta(scanId) {
+            document.getElementById("scan-id").textContent = scanId || "N/A";
+            document.getElementById("report-date").textContent = new Date().toLocaleString();
+        }
 
-    <div class="disclaimer">
-        <strong>Disclaimer:</strong> This report is generated by an AI system and is intended for
-        clinical decision support only. It does not replace professional medical judgment. All findings
-        should be verified by a qualified radiologist or neurologist. Confidence scores indicate the
-        reliability of AI predictions — findings below 70% confidence should be interpreted with caution.
-    </div>
+        function renderAnalysis(data) {
+            const governance = data.clinical_governance || {};
+            const provenance = governance.provenance || data.provenance || {};
+            document.getElementById("meta-modality").textContent = (data.modalities || []).join(", ") || "N/A";
+            document.getElementById("meta-atlas").textContent = data.atlas || "N/A";
+            document.getElementById("meta-confidence").textContent = data.overall_confidence != null ? `${Math.round(data.overall_confidence * 100)}%` : "N/A";
+            document.getElementById("meta-quality").textContent = data.scan_quality || "N/A";
+            document.getElementById("executive-summary").textContent = data.executive_summary || "Executive summary unavailable.";
+            document.getElementById("meta-decision-tier").textContent = governance.decision_tier || data.decision_tier || "N/A";
+            document.getElementById("meta-review-state").textContent = governance.review_state || data.review_state || "N/A";
+            document.getElementById("meta-automation").textContent = governance.automation_eligible ? "eligible" : "manual review";
+            document.getElementById("meta-escalation").textContent = governance.escalation?.level || "N/A";
+
+            const sourceKind = provenance.source_kind || "unknown";
+            const synthetic = provenance.synthetic_fallback ? "yes" : "no";
+            const requiredRoles = (governance.required_signoff_roles || []).join(", ") || "clinician";
+            document.getElementById("meta-provenance").textContent = `Source: ${sourceKind}. Synthetic fallback: ${synthetic}. Required sign-off roles: ${requiredRoles}.`;
+
+            const damageRows = document.getElementById("damage-table");
+            const summary = data.damage_summary || [];
+            if (summary.length) {
+                damageRows.innerHTML = summary.map((region) => {
+                    const level = region.severity_label || "GREEN";
+                    const cls = severityClass[level] || "sev-green";
+                    const confidence = Math.round((region.confidence || 0) * 100);
+                    return `
+                        <tr>
+                            <td>${region.anatomical_name || region.atlas_id || "Unknown"}</td>
+                            <td><span class="pill ${cls}">${level}</span></td>
+                            <td>${confidence}%</td>
+                            <td>${region.volume_mm3 || 0}</td>
+                            <td>${region.pct_region != null ? region.pct_region : region.volume_pct_of_region || 0}</td>
+                        </tr>
+                    `;
+                }).join("");
+            }
+
+            const findings = summary
+                .filter((region) => (region.severity_level || 0) >= 2)
+                .map((region) => {
+                    const confidence = Math.round((region.confidence || 0) * 100);
+                    return `<div class="finding"><strong>${region.anatomical_name || region.atlas_id}:</strong> ${region.severity_label || "UNKNOWN"} involvement (${confidence}% confidence).</div>`;
+                });
+
+            if (findings.length) {
+                document.getElementById("findings-list").innerHTML = findings.join("");
+            }
+
+            const evidenceList = document.getElementById("evidence-list");
+            const evidenceCards = governance.evidence_cards || [];
+            if (evidenceCards.length) {
+                evidenceList.innerHTML = evidenceCards.map((card) => `
+                    <div class="gov-evidence-item">
+                        <strong>${card.region}</strong>: ${card.severity_label} (${card.confidence_pct}% confidence, ${Math.round(card.volume_mm3 || 0)} mm3).
+                    </div>
+                `).join("");
+            }
+
+            const signoffList = document.getElementById("signoff-list");
+            const signoffs = data.signoff_history || [];
+            if (signoffs.length) {
+                signoffList.innerHTML = signoffs.slice().reverse().map((event) => `
+                    <div class="gov-evidence-item">
+                        <strong>${event.decision}</strong> by ${event.signed_by || "unknown"} (${event.signed_role || "n/a"}) at ${new Date(event.timestamp).toLocaleString()}.
+                    </div>
+                `).join("");
+            }
+        }
+
+        async function loadReport() {
+            const scanId = inferScanId();
+            setMeta(scanId);
+            try {
+                const response = await fetch(`/report-data/${encodeURIComponent(scanId)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                renderAnalysis(data);
+            } catch (_) {
+                document.getElementById("executive-summary").textContent = "Detailed report data could not be loaded for this scan.";
+            }
+        }
+
+        loadReport();
+    </script>
 </body>
 </html>

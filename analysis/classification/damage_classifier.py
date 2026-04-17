@@ -51,10 +51,10 @@ class DamageClassifier:
         """
         self.thresholds = thresholds or {
             "blue": 0.00,   # Not implicated
-            "green": 0.01,  # No damage detected
-            "yellow": 0.10, # Mild abnormality
-            "orange": 0.30, # Moderate-to-severe
-            "red": 0.60,    # Severe damage
+            "green": 1.0,   # No damage detected (percent of region)
+            "yellow": 10.0, # Mild abnormality (percent of region)
+            "orange": 30.0, # Moderate-to-severe (percent of region)
+            "red": 60.0,    # Severe damage (percent of region)
         }
         self.atlas_labels = atlas_labels or {}
 
