@@ -60,6 +60,7 @@
         let volumeMaterials = [];
         let activeRenderMode = "hybrid";
         let volumeUsesSyntheticFallback = false;
+        let activeSurfaceDamageVolume = null;
         const objLoader = new OBJLoader();
         const gltfLoader = new GLTFLoader();
         let raycaster;
@@ -181,49 +182,110 @@
             return String(value || "demo").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
         }
 
-        function regionMatchesCoordinate(regionName, x, y, z) {
+        function regionFocusProfile(regionName) {
             const name = String(regionName || "").toLowerCase();
             const isLeft = name.includes("_l") || name.includes("left");
             const isRight = name.includes("_r") || name.includes("right");
 
-            if (name.includes("hippocamp") && isLeft && y < 0 && x < 0) return true;
-            if (name.includes("hippocamp") && isRight && y < 0 && x > 0) return true;
-            if (name.includes("precentral") && isLeft && y > 0.2 && x < 0) return true;
-            if (name.includes("precentral") && isRight && y > 0.2 && x > 0) return true;
-            if (name.includes("frontal") && isLeft && y > 0 && x < 0) return true;
-            if (name.includes("frontal") && isRight && y > 0 && x > 0) return true;
-            if (name.includes("temporal") && isLeft && y < -0.1 && x < 0) return true;
-            if (name.includes("temporal") && isRight && y < -0.1 && x > 0) return true;
-            if (name.includes("parietal") && y > 0.3) return true;
-            if (name.includes("occipital") && z < -0.5) return true;
-            return false;
+            if (name.includes("hippocamp")) {
+                return {
+                    center: { x: isLeft ? -0.38 : (isRight ? 0.38 : 0.0), y: -0.26, z: 0.05 },
+                    spread: { x: 0.23, y: 0.18, z: 0.20 },
+                };
+            }
+            if (name.includes("precentral")) {
+                return {
+                    center: { x: isLeft ? -0.34 : (isRight ? 0.34 : 0.0), y: 0.34, z: 0.16 },
+                    spread: { x: 0.26, y: 0.23, z: 0.24 },
+                };
+            }
+            if (name.includes("frontal")) {
+                return {
+                    center: { x: isLeft ? -0.18 : (isRight ? 0.18 : 0.0), y: 0.46, z: 0.16 },
+                    spread: { x: 0.32, y: 0.26, z: 0.30 },
+                };
+            }
+            if (name.includes("temporal")) {
+                return {
+                    center: { x: isLeft ? -0.42 : (isRight ? 0.42 : 0.0), y: -0.10, z: -0.02 },
+                    spread: { x: 0.29, y: 0.24, z: 0.28 },
+                };
+            }
+            if (name.includes("parietal")) {
+                return {
+                    center: { x: 0.0, y: 0.46, z: -0.08 },
+                    spread: { x: 0.36, y: 0.27, z: 0.24 },
+                };
+            }
+            if (name.includes("occipital")) {
+                return {
+                    center: { x: isLeft ? -0.22 : (isRight ? 0.22 : 0.0), y: 0.06, z: -0.64 },
+                    spread: { x: 0.28, y: 0.22, z: 0.26 },
+                };
+            }
+
+            return {
+                center: { x: isLeft ? -0.22 : (isRight ? 0.22 : 0.0), y: 0.10, z: 0.0 },
+                spread: { x: 0.38, y: 0.31, z: 0.31 },
+            };
+        }
+
+        function computeRegionInfluence(region, x, y, z) {
+            if (!region) return 0;
+            const profile = regionFocusProfile(region.anatomical_name || region.atlas_id || "");
+            const sx = Math.max(0.12, Number(profile.spread.x) || 0.3);
+            const sy = Math.max(0.12, Number(profile.spread.y) || 0.3);
+            const sz = Math.max(0.12, Number(profile.spread.z) || 0.3);
+            const dx = (x - Number(profile.center.x || 0)) / sx;
+            const dy = (y - Number(profile.center.y || 0)) / sy;
+            const dz = (z - Number(profile.center.z || 0)) / sz;
+            const gaussian = Math.exp(-0.5 * ((dx * dx) + (dy * dy) + (dz * dz)));
+            const confidence = clampValue(Number(region.confidence ?? 0.62), 0, 1);
+            const severity = clampValue(Number(region.severity_level || 0), 0, 4);
+            const severityBoost = 0.52 + (severity * 0.19);
+            return gaussian * severityBoost * (0.62 + (confidence * 0.38));
+        }
+
+        function regionMatchesCoordinate(regionName, x, y, z) {
+            const pseudoRegion = { anatomical_name: regionName, severity_level: 2, confidence: 0.6 };
+            return computeRegionInfluence(pseudoRegion, x, y, z) >= 0.26;
         }
 
         function resolveSeverityLevel(regions, x, y, z) {
-            let severityLevel = 1;
+            let selectedLevel = 1;
+            let bestScore = 0;
+
             for (const region of regions) {
-                const level = region.severity_level || 0;
-                if (regionMatchesCoordinate(region.anatomical_name, x, y, z) && level > severityLevel) {
-                    severityLevel = level;
+                const level = clampValue(Number(region?.severity_level || 0), 0, 4);
+                if (level <= 0) continue;
+                const influence = computeRegionInfluence(region, x, y, z);
+                const score = influence * (0.65 + (level * 0.23));
+                if (score > bestScore) {
+                    bestScore = score;
+                    selectedLevel = Math.max(1, level);
                 }
             }
-            return severityLevel;
+
+            return bestScore >= 0.18 ? selectedLevel : 1;
         }
 
         function inferRegionFromPoint(regions, x, y, z) {
             let topRegion = null;
-            let topScore = -1;
+            let topScore = 0;
+
             for (const region of regions) {
-                if (!regionMatchesCoordinate(region.anatomical_name, x, y, z)) continue;
-                const severity = region.severity_level || 0;
-                const confidence = region.confidence || 0;
-                const score = (severity * 10) + confidence;
+                const severity = clampValue(Number(region?.severity_level || 0), 0, 4);
+                if (severity <= 0) continue;
+                const confidence = clampValue(Number(region?.confidence ?? 0), 0, 1);
+                const influence = computeRegionInfluence(region, x, y, z);
+                const score = influence * (1.0 + (severity * 0.35) + (confidence * 0.22));
                 if (score > topScore) {
                     topScore = score;
                     topRegion = region;
                 }
             }
-            return topRegion;
+
+            return topScore >= 0.2 ? topRegion : null;
         }
 
         function clampValue(value, min, max) {
@@ -521,6 +583,71 @@
             output.textContent = message;
         }
 
+        function renderViewerInsights(data = analysisData, patientOverride = null) {
+            const riskChip = document.getElementById("viewer-insights-risk");
+            const list = document.getElementById("viewer-insights-list");
+            if (!riskChip || !list) return;
+
+            const patient = patientOverride || findPatientById(data?.patient_id) || getSelectedPatient();
+            const regions = normalizeRegions(data);
+            const severeCount = regions.filter((region) => Number(region?.severity_level || 0) >= 4).length;
+            const moderateCount = regions.filter((region) => Number(region?.severity_level || 0) === 3).length;
+            const mildCount = regions.filter((region) => Number(region?.severity_level || 0) === 2).length;
+            const flaggedCount = severeCount + moderateCount + mildCount;
+            const confidenceValue = data?.overall_confidence ?? patient?.overall_confidence;
+            const confidencePct = Number.isFinite(Number(confidenceValue))
+                ? Math.round(Number(confidenceValue) * 100)
+                : null;
+
+            if (!patient && !data) {
+                riskChip.className = "risk-chip low";
+                riskChip.textContent = "n/a";
+                list.innerHTML = "<div class='insight-item muted'>Load a scan to view top neurological findings and confidence context.</div>";
+                return;
+            }
+
+            const riskClass = getRiskClass(data?.risk_band || patient?.risk_band || "low");
+            riskChip.className = `risk-chip ${riskClass}`;
+            riskChip.textContent = (RISK_LABELS[riskClass] || riskClass).toUpperCase();
+
+            const topFindings = regions
+                .filter((region) => Number(region?.severity_level || 0) >= 2)
+                .sort((left, right) => {
+                    const leftScore = (Number(left?.severity_level || 0) * 100) + Number(left?.confidence || 0);
+                    const rightScore = (Number(right?.severity_level || 0) * 100) + Number(right?.confidence || 0);
+                    return rightScore - leftScore;
+                })
+                .slice(0, 3)
+                .map((region) => {
+                    const level = SEVERITY_LABELS[Number(region?.severity_level || 0)] || "Unknown";
+                    const conf = Math.round(Number(region?.confidence || 0) * 100);
+                    const label = region?.anatomical_name || region?.atlas_id || "Unmapped";
+                    return `${label} (${level}${conf > 0 ? ` ${conf}%` : ""})`;
+                });
+
+            const modality = (data?.modalities && data.modalities[0]) || patient?.modality || "N/A";
+            const trend = String(patient?.trend || data?.trend || "baseline").replace(/_/g, " ");
+            const scanId = data?.scan_id || patient?.latest_scan_id || "n/a";
+            const summary = data?.executive_summary || patient?.primary_concern || "No clinical summary available.";
+
+            const insightRows = [];
+            insightRows.push(`<div class='insight-item'><strong>${scanId}</strong> | ${modality} | ${flaggedCount} flagged regions</div>`);
+            if (confidencePct !== null) {
+                insightRows.push(`<div class='insight-item'><strong>Model confidence:</strong> ${confidencePct}% | <strong>Trend:</strong> ${trend}</div>`);
+            }
+            if (topFindings.length > 0) {
+                insightRows.push(`<div class='insight-item'><strong>Top findings:</strong> ${topFindings.join(" | ")}</div>`);
+            } else {
+                insightRows.push("<div class='insight-item'>No elevated regional burden identified in the current case profile.</div>");
+            }
+            if (severeCount > 0 || moderateCount > 0 || mildCount > 0) {
+                insightRows.push(`<div class='insight-item'><strong>Severity mix:</strong> ${severeCount} severe | ${moderateCount} moderate | ${mildCount} mild</div>`);
+            }
+            insightRows.push(`<div class='insight-item'>${summary}</div>`);
+
+            list.innerHTML = insightRows.join("");
+        }
+
         function clearViewerMeasurementVisual() {
             const visual = clinicalState.viewerTools.measureVisual;
             if (!visual || !scene) return;
@@ -758,6 +885,8 @@
                 volumeTexture.dispose();
                 volumeTexture = null;
             }
+
+            activeSurfaceDamageVolume = null;
         }
 
         async function fetchVolumePayload(scanId, resolution = "standard") {
@@ -810,6 +939,13 @@
             if (packed.length !== expectedLength) {
                 throw new Error(`Unexpected volume payload size. expected=${expectedLength} got=${packed.length}`);
             }
+
+            activeSurfaceDamageVolume = {
+                width: sx,
+                height: sy,
+                depth: sz,
+                voxels: packed,
+            };
 
             const texture = new THREE.Data3DTexture(packed, sx, sy, sz);
             texture.format = THREE.RGBAFormat;
@@ -1277,7 +1413,15 @@
             }
 
             const regions = normalizeRegions(analysisData);
-            const region = inferRegionFromPoint(regions, hit.point.x, hit.point.y, hit.point.z);
+            const localSeverity = resolveSeverityLevel(regions, hit.point.x, hit.point.y, hit.point.z);
+            const region = inferRegionFromPoint(regions, hit.point.x, hit.point.y, hit.point.z) || (localSeverity >= 2
+                ? {
+                    anatomical_name: "Localized lesion burden",
+                    atlas_id: "localized-burden",
+                    severity_level: localSeverity,
+                    confidence: 0,
+                }
+                : null);
 
             if (clinicalState.viewerTools.mode === "measure") {
                 handleViewerMeasurementClick(hit.point, region);
@@ -1286,7 +1430,7 @@
             }
 
             const regionName = region?.anatomical_name || region?.atlas_id || "No mapped region";
-            const severity = SEVERITY_LABELS[region?.severity_level || 1] || "Healthy";
+            const severity = SEVERITY_LABELS[region?.severity_level || localSeverity || 1] || "Healthy";
             const confidence = Math.round((region?.confidence || 0.0) * 100);
 
             clearViewerFocus();
@@ -1628,13 +1772,59 @@
             };
         }
 
+        function sampleSurfaceVolumeAtPoint(point, bounds) {
+            const volume = activeSurfaceDamageVolume;
+            if (!volume || !point || !bounds) return null;
+
+            const sizeX = Math.max(1e-6, bounds.max.x - bounds.min.x);
+            const sizeY = Math.max(1e-6, bounds.max.y - bounds.min.y);
+            const sizeZ = Math.max(1e-6, bounds.max.z - bounds.min.z);
+
+            const nx = clampValue((point.x - bounds.min.x) / sizeX, 0, 1);
+            const ny = clampValue((point.y - bounds.min.y) / sizeY, 0, 1);
+            const nz = clampValue((point.z - bounds.min.z) / sizeZ, 0, 1);
+
+            const vx = clampValue(Math.round(nx * (volume.width - 1)), 0, volume.width - 1);
+            const vy = clampValue(Math.round((1 - ny) * (volume.height - 1)), 0, volume.height - 1);
+            const vz = clampValue(Math.round(nz * (volume.depth - 1)), 0, volume.depth - 1);
+            const base = ((vz * volume.height * volume.width) + (vy * volume.width) + vx) * 4;
+            const voxels = volume.voxels;
+
+            return {
+                intensity: voxels[base] / 255,
+                gray: voxels[base + 1] / 255,
+                white: voxels[base + 2] / 255,
+                damage: voxels[base + 3] / 255,
+            };
+        }
+
+        function severityFromVolumeSample(sample) {
+            if (!sample) return 1;
+            const anatomy = Math.max(sample.intensity, sample.gray, sample.white);
+            if (anatomy < 0.012) return 0;
+            if (sample.damage >= 0.70) return 4;
+            if (sample.damage >= 0.43) return 3;
+            if (sample.damage >= 0.18) return 2;
+            return 1;
+        }
+
         function applyDamageColors(group, damageData, visibleLvls) {
             const regions = normalizeRegions(damageData);
             const baseColor = { r: 0.82, g: 0.85, b: 0.90 };
             const severityBlend = { 2: 0.16, 3: 0.28, 4: 0.44 };
+            const worldBounds = new THREE.Box3().setFromObject(group);
+            const useVolumeGuidance = Boolean(
+                activeSurfaceDamageVolume &&
+                !volumeUsesSyntheticFallback &&
+                worldBounds &&
+                !worldBounds.isEmpty()
+            );
+            const worldPoint = new THREE.Vector3();
 
             group.traverse((child) => {
                 if (!child.isMesh || !child.geometry || !child.geometry.attributes.position) return;
+
+                child.updateMatrixWorld(true);
 
                 const pos = child.geometry.attributes.position;
                 if (!child.geometry.attributes.color) {
@@ -1649,12 +1839,24 @@
                 const colors = child.geometry.attributes.color;
 
                 for (let i = 0; i < pos.count; i++) {
-                    const x = pos.getX(i);
-                    const y = pos.getY(i);
-                    const z = pos.getZ(i);
-                    const severityLevel = resolveSeverityLevel(regions, x, y, z);
+                    worldPoint.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(child.matrixWorld);
+                    const regionalSeverity = resolveSeverityLevel(regions, worldPoint.x, worldPoint.y, worldPoint.z);
+                    const sample = useVolumeGuidance ? sampleSurfaceVolumeAtPoint(worldPoint, worldBounds) : null;
+                    const volumeSeverity = useVolumeGuidance ? severityFromVolumeSample(sample) : 1;
+                    let severityLevel = useVolumeGuidance ? volumeSeverity : regionalSeverity;
 
-                    const corticalShade = 0.96 + (Math.max(-1, Math.min(1, y)) * 0.03);
+                    if (useVolumeGuidance && sample) {
+                        if (regionalSeverity >= 3 && sample.damage > 0.22) {
+                            severityLevel = Math.max(severityLevel, Math.min(4, regionalSeverity));
+                        } else if (regionalSeverity >= 2 && sample.damage > 0.1) {
+                            severityLevel = Math.max(severityLevel, 2);
+                        }
+                    }
+
+                    const anatomySeed = sample
+                        ? Math.max(sample.intensity, sample.gray, sample.white)
+                        : (0.42 + (Math.max(-1, Math.min(1, worldPoint.y)) * 0.08));
+                    const corticalShade = 0.76 + (anatomySeed * 0.34);
                     const baseR = Math.min(1, Math.max(0, baseColor.r * corticalShade));
                     const baseG = Math.min(1, Math.max(0, baseColor.g * corticalShade));
                     const baseB = Math.min(1, Math.max(0, baseColor.b * corticalShade));
@@ -1668,7 +1870,7 @@
                     const overlayR = ((c >> 16) & 0xFF) / 255;
                     const overlayG = ((c >> 8) & 0xFF) / 255;
                     const overlayB = (c & 0xFF) / 255;
-                    const blend = severityBlend[severityLevel] || 0.2;
+                    const blend = Math.min(0.62, (severityBlend[severityLevel] || 0.2) + ((sample?.damage || 0) * 0.14));
 
                     colors.setXYZ(
                         i,
@@ -1693,6 +1895,25 @@
             const mins = Math.floor(value / 60);
             const secs = Math.round(value % 60);
             return `ETA ${mins}m ${secs}s`;
+        }
+
+        function setRenderLoaderState({
+            active = false,
+            title = "Preparing 3D renderer",
+            detail = "Initializing anatomical mapping pipeline...",
+            progress = 0,
+        } = {}) {
+            const overlay = document.getElementById("render-loader-overlay");
+            const titleEl = document.getElementById("render-loader-title");
+            const detailEl = document.getElementById("render-loader-detail");
+            const progressEl = document.getElementById("render-loader-progress");
+            if (!overlay || !titleEl || !detailEl || !progressEl) return;
+
+            overlay.classList.toggle("active", Boolean(active));
+            titleEl.textContent = String(title || "Preparing 3D renderer");
+            detailEl.textContent = String(detail || "Initializing anatomical mapping pipeline...");
+            const pct = clampValue(Number(progress) || 0, 0, 100);
+            progressEl.style.width = `${pct}%`;
         }
 
         function setLoaderState({ active = false, progress = 0, stage = "waiting", etaSeconds = null } = {}) {
@@ -4147,6 +4368,7 @@
                 renderTimeline(null, "");
                 updateClinicalKpis(null, patient);
                 renderGovernancePanel(null);
+                renderViewerInsights(null, null);
                 return;
             }
 
@@ -4183,6 +4405,7 @@
             renderTimeline(patient, data?.scan_id || "");
             updateClinicalKpis(data, patient);
             renderGovernancePanel(data || null);
+            renderViewerInsights(data, patient);
         }
 
         function setSelectedPatient(patientId) {
@@ -4243,6 +4466,7 @@
                 updateStatus("Sample patient list unavailable. You can still upload scans manually.");
                 updateClinicalKpis();
                 renderGovernancePanel(null);
+                renderViewerInsights(null, null);
                 updateClinicalWorkflow();
             }
         }
@@ -4689,99 +4913,156 @@
         }
 
         async function loadBrainFromAnalysis(data) {
-            if (brainGroup) scene.remove(brainGroup);
-            disposeVolumeRenderAssets();
-            clearViewerFocus();
-            clearTrajectoryPlan();
-            clearViewerMeasurementVisual();
-            clearViewerBookmarks(true);
-            clinicalState.viewerTools.mode = "";
-            clinicalState.viewerTools.measureStart = null;
-            updateViewerToolButtons();
+            setRenderLoaderState({
+                active: true,
+                progress: 6,
+                title: "Preparing 3D map",
+                detail: "Resetting previous reconstruction layers...",
+            });
 
-            let reconstructionMode = "procedural";
-            let reconstructionQuality = "";
-            let reconstructionFallbackReason = "";
             try {
-                const reconstruction = await buildReconstructedBrain(data, SURFACE_MESH_QUALITY);
-                brainGroup = reconstruction.group;
-                reconstructionMode = "mri-fmri";
-                reconstructionQuality = reconstruction.payload?.mesh_quality === "extreme"
-                    ? "extreme-fidelity"
-                    : reconstruction.payload?.mesh_quality === "high"
-                        ? "high-fidelity"
-                        : "standard";
-            } catch (extremeError) {
-                console.warn("Extreme-quality mesh load failed; retrying high-quality mesh:", extremeError);
+                if (brainGroup) {
+                    scene.remove(brainGroup);
+                    brainGroup = null;
+                }
+                disposeVolumeRenderAssets();
+                clearViewerFocus();
+                clearTrajectoryPlan();
+                clearViewerMeasurementVisual();
+                clearViewerBookmarks(true);
+                clinicalState.viewerTools.mode = "";
+                clinicalState.viewerTools.measureStart = null;
+                updateViewerToolButtons();
+
+                setRenderLoaderState({
+                    active: true,
+                    progress: 18,
+                    title: "Reconstructing cortex",
+                    detail: "Building high-detail MRI/fMRI mesh geometry...",
+                });
+
+                let reconstructionMode = "procedural";
+                let reconstructionQuality = "";
+                let reconstructionFallbackReason = "";
                 try {
-                    const reconstruction = await buildReconstructedBrain(data, "high");
+                    const reconstruction = await buildReconstructedBrain(data, SURFACE_MESH_QUALITY);
                     brainGroup = reconstruction.group;
                     reconstructionMode = "mri-fmri";
-                    reconstructionQuality = "high-fidelity";
-                    reconstructionFallbackReason = "Extreme-detail mesh was unavailable, using high-detail patient mesh.";
-                } catch (highError) {
-                    console.warn("High-quality mesh load failed; retrying standard mesh:", highError);
+                    reconstructionQuality = reconstruction.payload?.mesh_quality === "extreme"
+                        ? "extreme-fidelity"
+                        : reconstruction.payload?.mesh_quality === "high"
+                            ? "high-fidelity"
+                            : "standard";
+                } catch (extremeError) {
+                    console.warn("Extreme-quality mesh load failed; retrying high-quality mesh:", extremeError);
                     try {
-                        const reconstruction = await buildReconstructedBrain(data, "standard");
+                        const reconstruction = await buildReconstructedBrain(data, "high");
                         brainGroup = reconstruction.group;
                         reconstructionMode = "mri-fmri";
-                        reconstructionQuality = "standard";
-                        reconstructionFallbackReason = "High-detail mesh was unavailable, using standard patient mesh.";
-                    } catch (standardError) {
-                        console.warn("Patient mesh load failed; falling back to procedural preview:", standardError);
-                        reconstructionFallbackReason = "Patient mesh generation failed, displaying procedural preview.";
-                        brainGroup = buildDemoBrain(data);
+                        reconstructionQuality = "high-fidelity";
+                        reconstructionFallbackReason = "Extreme-detail mesh was unavailable, using high-detail patient mesh.";
+                    } catch (highError) {
+                        console.warn("High-quality mesh load failed; retrying standard mesh:", highError);
+                        try {
+                            const reconstruction = await buildReconstructedBrain(data, "standard");
+                            brainGroup = reconstruction.group;
+                            reconstructionMode = "mri-fmri";
+                            reconstructionQuality = "standard";
+                            reconstructionFallbackReason = "High-detail mesh was unavailable, using standard patient mesh.";
+                        } catch (standardError) {
+                            console.warn("Patient mesh load failed; falling back to procedural preview:", standardError);
+                            reconstructionFallbackReason = "Patient mesh generation failed, displaying procedural preview.";
+                            brainGroup = buildDemoBrain(data);
+                        }
                     }
                 }
+
+                scene.add(brainGroup);
+
+                setRenderLoaderState({
+                    active: true,
+                    progress: 64,
+                    title: "Fusing volumetric context",
+                    detail: "Generating tri-planar volume overlays and anatomical depth cues...",
+                });
+                const volumeLoaded = await loadVolumeFromAnalysis(data);
+
+                const overlay = document.getElementById("upload-overlay");
+                if (overlay) overlay.style.display = "none";
+
+                const clipSlider = document.getElementById("clip-slider");
+                applyClipDepthFromSlider(clipSlider ? clipSlider.value : 0);
+                setRenderMode(volumeLoaded ? activeRenderMode : "surface");
+                updateViewerPickInfo("Click any cortical area in the 3D view to inspect the nearest affected region.");
+                latestReportPayload = null;
+                renderDetailedReportPanel(null);
+
+                const regions = data.damage_summary || normalizeRegions(data);
+                populateRegionList(regions);
+                showDiagnosis(data);
+
+                setRenderLoaderState({
+                    active: true,
+                    progress: 86,
+                    title: "Applying lesion map",
+                    detail: "Projecting volumetric burden to cortical surface with region-aware weighting...",
+                });
+                applyDamageColors(brainGroup, data, visibleLevels);
+                updateCaseSnapshot(data);
+                populateCompareScanOptions();
+                updateComparisonSummaries();
+
+                const activePatient = findPatientById(data.patient_id) || getSelectedPatient();
+                updateActivePatientBadge(activePatient, true);
+                updateClinicalKpis(data, activePatient);
+                renderViewerInsights(data, activePatient);
+                updateClinicalWorkflow();
+
+                const volumeStatus = volumeLoaded
+                    ? (volumeUsesSyntheticFallback
+                        ? "Volumetric view active (synthetic fallback due to non-volumetric upload source)."
+                        : "Volumetric view active with tri-planar (axial/coronal/sagittal) combined reconstruction and optional damage overlay.")
+                    : "Volumetric shader unavailable, using surface-only mode.";
+
+                if (reconstructionMode === "mri-fmri") {
+                    const detail = reconstructionQuality ? `${reconstructionQuality} mesh quality` : "mesh quality";
+                    const fallbackSuffix = reconstructionFallbackReason ? ` ${reconstructionFallbackReason}` : "";
+                    updateStatus(`Loaded scan ${data.scan_id} with MRI/fMRI-derived cortical reconstruction (${detail}). ${volumeStatus}${fallbackSuffix}`);
+                } else {
+                    const fallbackSuffix = reconstructionFallbackReason ? ` ${reconstructionFallbackReason}` : "";
+                    updateStatus(`Loaded scan ${data.scan_id} with fallback preview mesh. ${volumeStatus}${fallbackSuffix}`);
+                }
+                updateJobInfo(data.scan_id || "completed");
+                setLoaderState({ active: false, progress: 100, stage: "complete", etaSeconds: 0 });
+                setRenderLoaderState({
+                    active: true,
+                    progress: 100,
+                    title: "3D mapping ready",
+                    detail: "Accurate cortical severity projection is now interactive.",
+                });
+                loadDicomWorkstation(data);
+
+                generateDetailedReport(data.scan_id, { silent: true }).catch((error) => {
+                    console.warn("Detailed report prefetch failed:", error);
+                });
+            } catch (error) {
+                setRenderLoaderState({
+                    active: true,
+                    progress: 100,
+                    title: "Renderer load failed",
+                    detail: error?.message || "Unable to complete cortical reconstruction for this scan.",
+                });
+                throw error;
+            } finally {
+                window.setTimeout(() => {
+                    setRenderLoaderState({
+                        active: false,
+                        progress: 0,
+                        title: "Preparing 3D renderer",
+                        detail: "Initializing anatomical mapping pipeline...",
+                    });
+                }, 420);
             }
-
-            scene.add(brainGroup);
-            const volumeLoaded = await loadVolumeFromAnalysis(data);
-
-            const overlay = document.getElementById("upload-overlay");
-            if (overlay) overlay.style.display = "none";
-
-            const clipSlider = document.getElementById("clip-slider");
-            applyClipDepthFromSlider(clipSlider ? clipSlider.value : 0);
-            setRenderMode(volumeLoaded ? activeRenderMode : "surface");
-            updateViewerPickInfo("Click any cortical area in the 3D view to inspect the nearest affected region.");
-            latestReportPayload = null;
-            renderDetailedReportPanel(null);
-
-            const regions = data.damage_summary || normalizeRegions(data);
-            populateRegionList(regions);
-            showDiagnosis(data);
-            applyDamageColors(brainGroup, data, visibleLevels);
-            updateCaseSnapshot(data);
-            populateCompareScanOptions();
-            updateComparisonSummaries();
-
-            const activePatient = findPatientById(data.patient_id) || getSelectedPatient();
-            updateActivePatientBadge(activePatient, true);
-            updateClinicalKpis(data, activePatient);
-            updateClinicalWorkflow();
-
-            const volumeStatus = volumeLoaded
-                ? (volumeUsesSyntheticFallback
-                    ? "Volumetric view active (synthetic fallback due to non-volumetric upload source)."
-                    : "Volumetric view active with tri-planar (axial/coronal/sagittal) combined reconstruction and optional damage overlay.")
-                : "Volumetric shader unavailable, using surface-only mode.";
-
-            if (reconstructionMode === "mri-fmri") {
-                const detail = reconstructionQuality ? `${reconstructionQuality} mesh quality` : "mesh quality";
-                const fallbackSuffix = reconstructionFallbackReason ? ` ${reconstructionFallbackReason}` : "";
-                updateStatus(`Loaded scan ${data.scan_id} with MRI/fMRI-derived cortical reconstruction (${detail}). ${volumeStatus}${fallbackSuffix}`);
-            } else {
-                const fallbackSuffix = reconstructionFallbackReason ? ` ${reconstructionFallbackReason}` : "";
-                updateStatus(`Loaded scan ${data.scan_id} with fallback preview mesh. ${volumeStatus}${fallbackSuffix}`);
-            }
-            updateJobInfo(data.scan_id || "completed");
-            setLoaderState({ active: false, progress: 100, stage: "complete", etaSeconds: 0 });
-            loadDicomWorkstation(data);
-
-            generateDetailedReport(data.scan_id, { silent: true }).catch((error) => {
-                console.warn("Detailed report prefetch failed:", error);
-            });
         }
 
         async function uploadScan(file) {
@@ -4924,6 +5205,7 @@
             renderDetailedReportPanel(null);
             updateViewerToolButtons();
             renderViewerBookmarks();
+            renderViewerInsights(null, null);
             updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
 
             if (authToken) {

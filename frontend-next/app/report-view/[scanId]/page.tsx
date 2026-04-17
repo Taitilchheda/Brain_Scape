@@ -9,6 +9,48 @@ type MetricRow = {
   unit?: string;
 };
 
+type FindingRow = {
+  region?: string;
+  severity_label?: string;
+  severity_level?: number;
+  confidence_pct?: number;
+  volume_mm3?: number;
+  volume_pct_of_region?: number;
+};
+
+type DifferentialRow = {
+  etiology?: string;
+  probability_pct?: number;
+  rationale?: string | null;
+};
+
+type CriticalFinding = {
+  finding_id?: string;
+  severity?: string;
+  category?: string;
+  title?: string;
+  description?: string;
+  requires_acknowledgement?: boolean;
+};
+
+type UncertaintyRegion = {
+  anatomical_name?: string;
+  uncertainty?: number;
+  confidence?: number;
+  severity_level?: number;
+  volume_pct_of_region?: number;
+};
+
+type NeurologySections = {
+  indication?: string;
+  technique?: string;
+  key_findings?: string[];
+  impression?: string;
+  limitations?: string[];
+  recommended_actions?: string[];
+  structured_summary?: string;
+};
+
 type ReportPayload = {
   scan_id?: string;
   summary?: string;
@@ -16,12 +58,29 @@ type ReportPayload = {
   report_mode_notice?: string;
   quantitative_metrics?: Record<string, number | string | null>;
   metric_rows?: MetricRow[];
+  finding_rows?: FindingRow[];
+  differential_diagnosis?: DifferentialRow[];
+  critical_findings?: CriticalFinding[];
+  uncertainty_profile?: {
+    global_uncertainty?: number;
+    high_uncertainty_regions?: UncertaintyRegion[];
+  };
+  neurology_standard_sections?: NeurologySections;
   report_sections?: {
     impression?: string;
     largest_region?: { name?: string; volume_mm3?: number | null };
     risk_statement?: string;
+    technique?: string;
+    limitations?: string[];
+  };
+  report_workflow?: {
+    draft_available?: boolean;
+    finalized?: boolean;
+    finalized_at?: string | null;
+    finalized_by?: string | null;
   };
   pdf_url?: string;
+  pdf_available?: boolean;
 };
 
 function toDisplayRows(report: ReportPayload | null): MetricRow[] {
@@ -45,6 +104,50 @@ function formatValue(value: number | string | null | undefined, unit = ""): stri
   if (unit === "%") return `${rounded}%`;
   if (unit) return `${rounded} ${unit}`;
   return String(rounded);
+}
+
+function riskBadgeStyle(riskBand: string): { background: string; border: string; color: string; label: string } {
+  if (riskBand === "high") {
+    return {
+      background: "rgba(255, 232, 230, 0.95)",
+      border: "1px solid #efb0a9",
+      color: "#7e1f18",
+      label: "High Risk",
+    };
+  }
+  if (riskBand === "moderate") {
+    return {
+      background: "rgba(255, 245, 226, 0.95)",
+      border: "1px solid #e8c48f",
+      color: "#7a4f12",
+      label: "Moderate Risk",
+    };
+  }
+  if (riskBand === "low") {
+    return {
+      background: "rgba(233, 248, 238, 0.95)",
+      border: "1px solid #8bc6a2",
+      color: "#1f5b38",
+      label: "Low Risk",
+    };
+  }
+  return {
+    background: "rgba(236, 244, 255, 0.95)",
+    border: "1px solid #b9d0f2",
+    color: "#274f80",
+    label: "Risk Pending",
+  };
+}
+
+function asNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return String(value || "").trim();
 }
 
 export default function ReportViewPage() {
@@ -137,7 +240,32 @@ export default function ReportViewPage() {
   }, [apiBase, mode, scanId]);
 
   const rows = toDisplayRows(report);
+  const findingRows = Array.isArray(report?.finding_rows) ? report.finding_rows : [];
+  const differentialRows = Array.isArray(report?.differential_diagnosis) ? report.differential_diagnosis : [];
+  const criticalFindings = Array.isArray(report?.critical_findings) ? report.critical_findings : [];
+  const uncertaintyRows = Array.isArray(report?.uncertainty_profile?.high_uncertainty_regions)
+    ? report.uncertainty_profile?.high_uncertainty_regions
+    : [];
+  const neurologySections = report?.neurology_standard_sections;
   const largestRegion = report?.report_sections?.largest_region;
+  const quantitative = report?.quantitative_metrics || {};
+  const riskBand = normalizeText(String(quantitative.risk_band || "unknown")).toLowerCase();
+  const riskStyle = riskBadgeStyle(riskBand);
+
+  const pdfHref = useMemo(() => {
+    const raw = normalizeText(report?.pdf_url);
+    if (!raw) return "";
+    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+    return `${apiBase}${raw}`;
+  }, [apiBase, report?.pdf_url]);
+
+  const uncertaintyIndex = asNumber(report?.uncertainty_profile?.global_uncertainty);
+  const cardStyle = {
+    border: "1px solid #d9e7f8",
+    borderRadius: 12,
+    padding: "0.66rem 0.72rem",
+    background: "#f8fbff",
+  };
 
   return (
     <main
@@ -152,7 +280,7 @@ export default function ReportViewPage() {
       <section
         style={{
           margin: "0 auto",
-          maxWidth: 980,
+          maxWidth: 1060,
           borderRadius: 16,
           border: "1px solid rgba(168, 195, 230, 0.75)",
           background: "rgba(255, 255, 255, 0.85)",
@@ -163,26 +291,46 @@ export default function ReportViewPage() {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.8rem", flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "1.22rem" }}>Clinical Report</h1>
+            <h1 style={{ margin: 0, fontSize: "1.22rem" }}>Neurology Clinical Report</h1>
             <p style={{ margin: "0.2rem 0 0", color: "#507091", fontSize: "0.88rem" }}>
               Scan {scanId || "-"} | Mode: {mode}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{
-              border: "1px solid #88b5e1",
-              borderRadius: 10,
-              padding: "0.46rem 0.7rem",
-              background: "#f0f7ff",
-              color: "#174165",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Refresh
-          </button>
+          <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
+            {pdfHref && (
+              <a
+                href={pdfHref}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  border: "1px solid #6f9fd6",
+                  borderRadius: 10,
+                  padding: "0.46rem 0.74rem",
+                  background: "#e8f2ff",
+                  color: "#18456d",
+                  textDecoration: "none",
+                  fontWeight: 700,
+                }}
+              >
+                Open generated PDF
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                border: "1px solid #88b5e1",
+                borderRadius: 10,
+                padding: "0.46rem 0.7rem",
+                background: "#f0f7ff",
+                color: "#174165",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {loading && <p style={{ marginTop: "1rem" }}>Loading report...</p>}
@@ -190,14 +338,55 @@ export default function ReportViewPage() {
 
         {!loading && !error && report && (
           <>
-            <div style={{ marginTop: "0.9rem", fontSize: "0.9rem", color: "#3f5e7f" }}>
+            <div style={{ marginTop: "0.9rem", fontSize: "0.9rem", color: "#3f5e7f", lineHeight: 1.5 }}>
               <div><strong>Generated:</strong> {report.generated_at || "n/a"}</div>
               <div><strong>Notice:</strong> {report.report_mode_notice || "-"}</div>
-              <div><strong>Summary:</strong> {report.summary || "-"}</div>
+              <div><strong>Summary:</strong> {report.summary || neurologySections?.structured_summary || "-"}</div>
+              <div><strong>Workflow:</strong> {report.report_workflow?.finalized ? "Finalized" : "Draft"}</div>
+              {report.report_workflow?.finalized_at && (
+                <div><strong>Finalized at:</strong> {report.report_workflow.finalized_at}</div>
+              )}
+              {!report.pdf_available && (
+                <div style={{ marginTop: "0.25rem", color: "#8d5317" }}>
+                  PDF is being prepared. Refresh in a moment if the link is unavailable.
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                marginTop: "0.9rem",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "0.62rem",
+              }}
+            >
+              <div style={{ ...cardStyle, ...riskStyle }}>
+                <div style={{ fontSize: "0.74rem", textTransform: "uppercase", letterSpacing: "0.06em", opacity: 0.86 }}>Risk band</div>
+                <div style={{ fontSize: "1.02rem", fontWeight: 700 }}>{riskStyle.label}</div>
+              </div>
+              <div style={cardStyle}>
+                <div style={{ fontSize: "0.74rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#5c7a9c" }}>Triage score</div>
+                <div style={{ fontSize: "1.02rem", fontWeight: 700, color: "#194069" }}>
+                  {formatValue(quantitative.triage_score as number | string | null | undefined, "score")}
+                </div>
+              </div>
+              <div style={cardStyle}>
+                <div style={{ fontSize: "0.74rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#5c7a9c" }}>Overall confidence</div>
+                <div style={{ fontSize: "1.02rem", fontWeight: 700, color: "#194069" }}>
+                  {formatValue(quantitative.overall_confidence_pct as number | string | null | undefined, "%")}
+                </div>
+              </div>
+              <div style={cardStyle}>
+                <div style={{ fontSize: "0.74rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#5c7a9c" }}>Scan quality</div>
+                <div style={{ fontSize: "1.02rem", fontWeight: 700, color: "#194069" }}>
+                  {String(quantitative.scan_quality || "unknown")}
+                </div>
+              </div>
             </div>
 
             <div style={{ marginTop: "0.9rem", border: "1px solid #d8e6f7", borderRadius: 12, padding: "0.65rem", background: "#f9fcff" }}>
-              <div><strong>Impression:</strong> {report.report_sections?.impression || "-"}</div>
+              <div><strong>Impression:</strong> {report.report_sections?.impression || neurologySections?.impression || "-"}</div>
               <div style={{ marginTop: "0.26rem" }}>
                 <strong>Largest region:</strong> {largestRegion?.name || "-"}
                 {largestRegion?.volume_mm3 !== undefined && largestRegion?.volume_mm3 !== null
@@ -205,7 +394,125 @@ export default function ReportViewPage() {
                   : ""}
               </div>
               <div style={{ marginTop: "0.26rem" }}><strong>Risk:</strong> {report.report_sections?.risk_statement || "-"}</div>
+              {(neurologySections?.technique || report.report_sections?.technique) && (
+                <div style={{ marginTop: "0.26rem" }}>
+                  <strong>Technique:</strong> {neurologySections?.technique || report.report_sections?.technique}
+                </div>
+              )}
             </div>
+
+            {neurologySections && (
+              <div style={{ marginTop: "0.9rem", border: "1px solid #d8e6f7", borderRadius: 12, padding: "0.65rem", background: "#fcfdff" }}>
+                <h2 style={{ margin: 0, fontSize: "1rem" }}>Neurology-Structured Sections</h2>
+                <div style={{ marginTop: "0.45rem", fontSize: "0.9rem", color: "#284564", lineHeight: 1.5 }}>
+                  {neurologySections.indication && <div><strong>Indication:</strong> {neurologySections.indication}</div>}
+                  {neurologySections.technique && <div><strong>Technique:</strong> {neurologySections.technique}</div>}
+                </div>
+
+                {Array.isArray(neurologySections.key_findings) && neurologySections.key_findings.length > 0 && (
+                  <div style={{ marginTop: "0.6rem" }}>
+                    <h3 style={{ margin: "0 0 0.3rem", fontSize: "0.92rem", color: "#214465" }}>Key Findings</h3>
+                    <ul style={{ margin: 0, paddingLeft: "1.15rem", color: "#355778", fontSize: "0.88rem", lineHeight: 1.45 }}>
+                      {neurologySections.key_findings.map((entry, index) => (
+                        <li key={`key-finding-${index}`}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {Array.isArray(neurologySections.limitations) && neurologySections.limitations.length > 0 && (
+                  <div style={{ marginTop: "0.6rem" }}>
+                    <h3 style={{ margin: "0 0 0.3rem", fontSize: "0.92rem", color: "#214465" }}>Limitations</h3>
+                    <ul style={{ margin: 0, paddingLeft: "1.15rem", color: "#355778", fontSize: "0.88rem", lineHeight: 1.45 }}>
+                      {neurologySections.limitations.map((entry, index) => (
+                        <li key={`limitation-${index}`}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {Array.isArray(neurologySections.recommended_actions) && neurologySections.recommended_actions.length > 0 && (
+                  <div style={{ marginTop: "0.6rem" }}>
+                    <h3 style={{ margin: "0 0 0.3rem", fontSize: "0.92rem", color: "#214465" }}>Recommended Actions</h3>
+                    <ul style={{ margin: 0, paddingLeft: "1.15rem", color: "#355778", fontSize: "0.88rem", lineHeight: 1.45 }}>
+                      {neurologySections.recommended_actions.map((entry, index) => (
+                        <li key={`recommendation-${index}`}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {findingRows.length > 0 && (
+              <>
+                <h2 style={{ marginTop: "1rem", marginBottom: "0.4rem", fontSize: "1rem" }}>Top Regional Findings</h2>
+                <div style={{ overflowX: "auto", border: "1px solid #d7e5f6", borderRadius: 12, background: "#fbfdff" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Region</th>
+                        <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Severity</th>
+                        <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Confidence</th>
+                        <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Volume</th>
+                        <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Regional burden</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {findingRows.map((row, index) => (
+                        <tr key={`${row.region || "region"}-${index}`}>
+                          <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>{row.region || "Unknown"}</td>
+                          <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                            {row.severity_label || "UNKNOWN"} (L{row.severity_level ?? "-"})
+                          </td>
+                          <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                            {formatValue(row.confidence_pct ?? null, "%")}
+                          </td>
+                          <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                            {formatValue(row.volume_mm3 ?? null, "mm3")}
+                          </td>
+                          <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                            {formatValue(row.volume_pct_of_region ?? null, "%")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {differentialRows.length > 0 && (
+              <>
+                <h2 style={{ marginTop: "1rem", marginBottom: "0.4rem", fontSize: "1rem" }}>Differential Diagnosis</h2>
+                <div style={{ border: "1px solid #d7e5f6", borderRadius: 12, background: "#fbfdff", padding: "0.65rem" }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Etiology</th>
+                          <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Probability</th>
+                          <th style={{ textAlign: "left", padding: "0.44rem", borderBottom: "1px solid #cfe0f4" }}>Rationale</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {differentialRows.map((item, index) => (
+                          <tr key={`${item.etiology || "dx"}-${index}`}>
+                            <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>{item.etiology || "Unspecified"}</td>
+                            <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                              {formatValue(item.probability_pct ?? null, "%")}
+                            </td>
+                            <td style={{ padding: "0.44rem", borderBottom: "1px solid #ebf2fa" }}>
+                              {item.rationale || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
 
             <h2 style={{ marginTop: "1rem", marginBottom: "0.4rem", fontSize: "1rem" }}>Quantitative Metrics</h2>
             <div style={{ overflowX: "auto" }}>
@@ -232,16 +539,52 @@ export default function ReportViewPage() {
               </table>
             </div>
 
-            {report.pdf_url && (
-              <div style={{ marginTop: "0.8rem" }}>
-                <a
-                  href={`${apiBase}${report.pdf_url}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "#1168af", fontWeight: 600 }}
-                >
-                  Open generated PDF
-                </a>
+            {(criticalFindings.length > 0 || uncertaintyRows.length > 0 || uncertaintyIndex !== null) && (
+              <div style={{ marginTop: "1rem", border: "1px solid #d7e5f6", borderRadius: 12, background: "#fbfdff", padding: "0.65rem" }}>
+                <h2 style={{ margin: 0, fontSize: "1rem" }}>Safety and Uncertainty Review</h2>
+                {uncertaintyIndex !== null && (
+                  <div style={{ marginTop: "0.45rem", fontSize: "0.9rem", color: "#34587a" }}>
+                    <strong>Global uncertainty index:</strong> {uncertaintyIndex.toFixed(3)}
+                  </div>
+                )}
+
+                {uncertaintyRows.length > 0 && (
+                  <div style={{ marginTop: "0.55rem", overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.86rem" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: "0.42rem", borderBottom: "1px solid #cfe0f4" }}>Region</th>
+                          <th style={{ textAlign: "left", padding: "0.42rem", borderBottom: "1px solid #cfe0f4" }}>Uncertainty</th>
+                          <th style={{ textAlign: "left", padding: "0.42rem", borderBottom: "1px solid #cfe0f4" }}>Confidence</th>
+                          <th style={{ textAlign: "left", padding: "0.42rem", borderBottom: "1px solid #cfe0f4" }}>Severity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uncertaintyRows.map((row, index) => (
+                          <tr key={`${row.anatomical_name || "uncertainty"}-${index}`}>
+                            <td style={{ padding: "0.42rem", borderBottom: "1px solid #ebf2fa" }}>{row.anatomical_name || "Unknown"}</td>
+                            <td style={{ padding: "0.42rem", borderBottom: "1px solid #ebf2fa" }}>{formatValue((row.uncertainty ?? 0) * 100, "%")}</td>
+                            <td style={{ padding: "0.42rem", borderBottom: "1px solid #ebf2fa" }}>{formatValue((row.confidence ?? 0) * 100, "%")}</td>
+                            <td style={{ padding: "0.42rem", borderBottom: "1px solid #ebf2fa" }}>L{row.severity_level ?? "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {criticalFindings.length > 0 && (
+                  <div style={{ marginTop: "0.65rem" }}>
+                    <h3 style={{ margin: "0 0 0.3rem", fontSize: "0.92rem", color: "#214465" }}>Critical Findings</h3>
+                    <ul style={{ margin: 0, paddingLeft: "1.15rem", color: "#355778", fontSize: "0.88rem", lineHeight: 1.45 }}>
+                      {criticalFindings.map((item, index) => (
+                        <li key={`${item.finding_id || "critical"}-${index}`}>
+                          <strong>{item.title || item.category || "Critical item"}:</strong> {item.description || "No description."}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </>

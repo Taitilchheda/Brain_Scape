@@ -992,6 +992,7 @@ async def get_report(
     safety_profile = decorated.get("safety_profile", {})
     finalization_events = list(_REPORT_FINALIZATION_STORE.get(scan_id, []))
     quantitative_metrics = decorated.get("quantitative_metrics") or _build_quantitative_report_metrics(decorated)
+    risk_band = str(quantitative_metrics.get("risk_band") or "unknown").lower()
 
     report_mode_notice = "Clinician report draft generated."
     if mode == "patient":
@@ -1000,9 +1001,61 @@ async def get_report(
             "Final care decisions remain clinician-reviewed."
         )
 
+    finding_rows = _build_report_region_rows(decorated)
+    differential_rows = _build_differential_rows(decorated)
+    critical_findings = list(decorated.get("critical_findings", []))
+    neurology_standard_sections = _build_neurology_standard_sections(
+        scan_id,
+        mode,
+        decorated,
+        quantitative_metrics,
+        report_mode_notice,
+        critical_findings,
+    )
+    report_sections = {
+        "impression": decorated.get("executive_summary") or "No executive summary available.",
+        "largest_region": {
+            "name": quantitative_metrics.get("largest_region_name"),
+            "volume_mm3": quantitative_metrics.get("largest_region_volume_mm3"),
+        },
+        "risk_statement": (
+            f"Current risk band is {risk_band} "
+            f"with triage score {quantitative_metrics.get('triage_score', 0)} "
+            f"and confidence {quantitative_metrics.get('overall_confidence_pct', 0)}%."
+        ),
+        "technique": neurology_standard_sections.get("technique"),
+        "limitations": neurology_standard_sections.get("limitations", []),
+    }
+
+    pdf_path = _ensure_report_pdf(
+        scan_id,
+        mode,
+        decorated,
+        quantitative_metrics,
+        report_mode_notice,
+        report_sections,
+        neurology_standard_sections,
+        finding_rows,
+        critical_findings,
+    )
+
+    summary = (
+        f"{risk_band.title()} risk profile with "
+        f"{quantitative_metrics.get('flagged_regions', 0)} flagged region(s), "
+        f"{quantitative_metrics.get('severe_regions', 0)} severe region(s), and "
+        f"triage score {quantitative_metrics.get('triage_score', 0)}."
+    )
+    if quantitative_metrics.get("largest_region_name"):
+        summary += (
+            f" Largest burden in {quantitative_metrics.get('largest_region_name')} "
+            f"({quantitative_metrics.get('largest_region_volume_mm3', 0)} mm3)."
+        )
+
     return {
-        "pdf_url": f"/outputs/reports/{scan_id}/report_{scan_id}_{mode}.pdf",
-        "summary": f"Report for scan {scan_id} in {mode} mode",
+        "scan_id": scan_id,
+        "pdf_url": f"/outputs/reports/{scan_id}/{pdf_path.name}",
+        "pdf_available": pdf_path.exists(),
+        "summary": summary,
         "template": template,
         "generated_at": _now_iso(),
         "report_mode_notice": report_mode_notice,
@@ -1018,24 +1071,18 @@ async def get_report(
             {"label": "Mean region confidence", "value": quantitative_metrics.get("mean_region_confidence_pct"), "unit": "%"},
             {"label": "Overall confidence", "value": quantitative_metrics.get("overall_confidence_pct"), "unit": "%"},
             {"label": "Triage score", "value": quantitative_metrics.get("triage_score"), "unit": "score"},
+            {"label": "Measured regions", "value": quantitative_metrics.get("measured_regions"), "unit": "count"},
         ],
-        "report_sections": {
-            "impression": decorated.get("executive_summary") or "No executive summary available.",
-            "largest_region": {
-                "name": quantitative_metrics.get("largest_region_name"),
-                "volume_mm3": quantitative_metrics.get("largest_region_volume_mm3"),
-            },
-            "risk_statement": (
-                f"Current risk band is {quantitative_metrics.get('risk_band', 'unknown')} "
-                f"with triage score {quantitative_metrics.get('triage_score', 0)}."
-            ),
-        },
+        "finding_rows": finding_rows,
+        "differential_diagnosis": differential_rows,
+        "neurology_standard_sections": neurology_standard_sections,
+        "report_sections": report_sections,
         "review_state": decorated.get("review_state"),
         "decision_tier": decorated.get("decision_tier"),
         "provenance_banner": decorated.get("provenance_banner", {}),
         "safety_profile": safety_profile,
         "uncertainty_profile": decorated.get("uncertainty_profile", {}),
-        "critical_findings": decorated.get("critical_findings", []),
+        "critical_findings": critical_findings,
         "report_workflow": {
             "draft_available": True,
             "finalized": bool(finalization_events),
@@ -1946,6 +1993,318 @@ def _build_quantitative_report_metrics(analysis: dict) -> dict[str, Any]:
     }
 
 
+def _report_pdf_path(scan_id: str, mode: str) -> Path:
+    normalized_mode = "patient" if str(mode).lower() == "patient" else "clinician"
+    report_dir = _OUTPUTS_DIR / "reports" / scan_id
+    report_dir.mkdir(parents=True, exist_ok=True)
+    return report_dir / f"report_{scan_id}_{normalized_mode}.pdf"
+
+
+def _pdf_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _write_minimal_pdf(path: Path, lines: list[str]) -> None:
+    content_lines = ["BT", "/F1 11 Tf", "40 800 Td"]
+    rendered = [str(line).strip() for line in lines if str(line).strip()]
+    if not rendered:
+        rendered = ["Brain_Scape Clinical Report"]
+
+    for idx, line in enumerate(rendered[:34]):
+        if idx > 0:
+            content_lines.append("0 -16 Td")
+        content_lines.append(f"({_pdf_escape(line[:120])}) Tj")
+    content_lines.append("ET")
+
+    stream = "\n".join(content_lines).encode("latin-1", errors="replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+
+    pdf = b"%PDF-1.4\n"
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf += f"{index} 0 obj\n".encode("ascii") + obj + b"\nendobj\n"
+
+    xref_offset = len(pdf)
+    pdf += f"xref\n0 {len(objects) + 1}\n".encode("ascii")
+    pdf += b"0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        pdf += f"{offset:010d} 00000 n \n".encode("ascii")
+
+    pdf += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode("ascii")
+    path.write_bytes(pdf)
+
+
+def _build_report_region_rows(analysis: dict) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    damage_summary = list(analysis.get("damage_summary", []))
+    damage_summary.sort(
+        key=lambda region: (
+            _safe_int(region.get("severity_level"), 0),
+            _safe_float(region.get("volume_mm3"), 0.0),
+        ),
+        reverse=True,
+    )
+
+    for region in damage_summary[:14]:
+        confidence = _safe_float(region.get("confidence"), 0.0)
+        pct_region = _safe_float(region.get("pct_region") or region.get("volume_pct_of_region"), 0.0)
+        rows.append(
+            {
+                "region": region.get("anatomical_name") or region.get("atlas_id", "Unknown"),
+                "severity_label": str(region.get("severity_label") or "UNKNOWN"),
+                "severity_level": _safe_int(region.get("severity_level"), 0),
+                "confidence_pct": round(confidence * 100.0, 1),
+                "volume_mm3": round(_safe_float(region.get("volume_mm3"), 0.0), 2),
+                "volume_pct_of_region": round(pct_region, 2),
+            }
+        )
+
+    return rows
+
+
+def _build_differential_rows(analysis: dict) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    differential = list(analysis.get("differential_diagnosis", []))
+
+    for candidate in differential[:8]:
+        probability = _safe_float(candidate.get("probability"), 0.0)
+        probability_pct = probability * 100.0 if 0.0 <= probability <= 1.0 else probability
+        rows.append(
+            {
+                "etiology": candidate.get("etiology") or candidate.get("label") or "Unspecified",
+                "probability_pct": round(probability_pct, 1),
+                "rationale": candidate.get("rationale") or candidate.get("reasoning") or candidate.get("clinical_context"),
+            }
+        )
+
+    return rows
+
+
+def _build_report_recommendations(
+    risk_band: str,
+    safety_profile: dict[str, Any],
+    critical_findings: list[dict[str, Any]],
+) -> list[str]:
+    recommendations: list[str] = []
+    normalized_band = (risk_band or "unknown").lower()
+
+    if normalized_band == "high":
+        recommendations.append("Urgent neurologic and neuroradiology review with same-day escalation workflow.")
+    elif normalized_band == "moderate":
+        recommendations.append("Prioritize clinician review in the current shift and correlate with neurologic exam.")
+    else:
+        recommendations.append("Routine follow-up review is reasonable if clinical presentation remains stable.")
+
+    recommendations.append("Correlate with prior imaging and clinical timeline to assess progression versus baseline variance.")
+
+    if critical_findings:
+        recommendations.append("Acknowledge listed critical findings and document disposition in the care workflow.")
+
+    if safety_profile.get("decision_support_only"):
+        recommendations.append("Treat this output as decision support only until manual confirmation and clinician sign-off.")
+
+    return recommendations[:5]
+
+
+def _build_neurology_standard_sections(
+    scan_id: str,
+    mode: str,
+    analysis: dict,
+    quantitative_metrics: dict[str, Any],
+    report_mode_notice: str,
+    critical_findings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    risk_band = str(quantitative_metrics.get("risk_band") or "unknown").lower()
+    safety_profile = dict(analysis.get("safety_profile", {}))
+    atlas_version = str(analysis.get("atlas") or "AAL3")
+    largest_region = quantitative_metrics.get("largest_region_name") or "unavailable"
+    largest_volume = quantitative_metrics.get("largest_region_volume_mm3", 0)
+
+    finding_rows = _build_report_region_rows(analysis)
+    key_findings = []
+    for row in finding_rows[:3]:
+        key_findings.append(
+            f"{row['region']}: {row['severity_label']} severity "
+            f"(confidence {row['confidence_pct']}%, volume {row['volume_mm3']} mm3)."
+        )
+    if not key_findings:
+        key_findings.append("No focal regions above configured reporting thresholds were identified.")
+
+    limitations = [
+        report_mode_notice,
+        (
+            f"Global uncertainty index: "
+            f"{_safe_float((analysis.get('uncertainty_profile') or {}).get('global_uncertainty'), 0.0):.2f}."
+        ),
+    ]
+    if safety_profile.get("decision_support_only"):
+        limitations.append("Decision-support-only safety mode is active; definitive statements are intentionally restricted.")
+
+    recommendations = _build_report_recommendations(risk_band, safety_profile, critical_findings)
+    structured_summary = (
+        f"{risk_band.title()} risk pattern for scan {scan_id} with "
+        f"triage score {quantitative_metrics.get('triage_score', 0)} and "
+        f"overall confidence {quantitative_metrics.get('overall_confidence_pct', 0)}%."
+    )
+
+    return {
+        "indication": f"Quantitative neurologic injury burden assessment for scan {scan_id}.",
+        "technique": (
+            f"Atlas-based lesion burden quantification ({atlas_version}), severity stratification, "
+            f"and confidence-calibrated uncertainty reporting in {mode} mode."
+        ),
+        "key_findings": key_findings,
+        "impression": (
+            f"Largest involved region: {largest_region} ({largest_volume} mm3). "
+            f"Risk band: {risk_band}."
+        ),
+        "limitations": limitations,
+        "recommended_actions": recommendations,
+        "structured_summary": structured_summary,
+    }
+
+
+def _ensure_report_pdf(
+    scan_id: str,
+    mode: str,
+    analysis: dict,
+    quantitative_metrics: dict[str, Any],
+    report_mode_notice: str,
+    report_sections: dict[str, Any],
+    neurology_standard_sections: dict[str, Any],
+    finding_rows: list[dict[str, Any]],
+    critical_findings: list[dict[str, Any]],
+) -> Path:
+    pdf_path = _report_pdf_path(scan_id, mode)
+    if pdf_path.exists():
+        return pdf_path
+
+    title = f"Brain_Scape Neurology Report ({mode.title()} Mode)"
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+        doc = SimpleDocTemplate(
+            str(pdf_path),
+            pagesize=A4,
+            leftMargin=32,
+            rightMargin=32,
+            topMargin=34,
+            bottomMargin=34,
+        )
+        styles = getSampleStyleSheet()
+        elements: list[Any] = []
+
+        elements.append(Paragraph(title, styles["Title"]))
+        elements.append(Paragraph(f"Scan ID: {scan_id}", styles["Normal"]))
+        elements.append(Paragraph(f"Generated: {_now_iso()}", styles["Normal"]))
+        elements.append(Spacer(1, 10))
+
+        elements.append(Paragraph("Summary", styles["Heading2"]))
+        elements.append(Paragraph(str(neurology_standard_sections.get("structured_summary", "n/a")), styles["Normal"]))
+        elements.append(Paragraph(str(report_mode_notice), styles["Normal"]))
+        elements.append(Spacer(1, 10))
+
+        metrics_table_data = [
+            ["Risk band", str(quantitative_metrics.get("risk_band", "unknown"))],
+            ["Triage score", str(quantitative_metrics.get("triage_score", "n/a"))],
+            ["Overall confidence (%)", str(quantitative_metrics.get("overall_confidence_pct", "n/a"))],
+            ["Flagged regions", str(quantitative_metrics.get("flagged_regions", "n/a"))],
+            ["Severe regions", str(quantitative_metrics.get("severe_regions", "n/a"))],
+            ["Largest region", str(quantitative_metrics.get("largest_region_name", "n/a"))],
+            ["Largest region volume (mm3)", str(quantitative_metrics.get("largest_region_volume_mm3", "n/a"))],
+        ]
+        elements.append(Paragraph("Quantitative Overview", styles["Heading2"]))
+        metrics_table = Table(metrics_table_data, colWidths=[220, 280])
+        metrics_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9f3ff")),
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ea")),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ]
+            )
+        )
+        elements.append(metrics_table)
+        elements.append(Spacer(1, 10))
+
+        if finding_rows:
+            elements.append(Paragraph("Top Regional Findings", styles["Heading2"]))
+            rows = [["Region", "Severity", "Confidence (%)", "Volume (mm3)"]]
+            for row in finding_rows[:12]:
+                rows.append([
+                    str(row.get("region", "Unknown")),
+                    str(row.get("severity_label", "UNKNOWN")),
+                    str(row.get("confidence_pct", "n/a")),
+                    str(row.get("volume_mm3", "n/a")),
+                ])
+            findings_table = Table(rows, repeatRows=1)
+            findings_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eff7ff")),
+                        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d5e2f1")),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ]
+                )
+            )
+            elements.append(findings_table)
+            elements.append(Spacer(1, 10))
+
+        elements.append(Paragraph("Impression", styles["Heading2"]))
+        elements.append(Paragraph(str(report_sections.get("impression", "No impression available.")), styles["Normal"]))
+        elements.append(Paragraph(str(report_sections.get("risk_statement", "")), styles["Normal"]))
+        elements.append(Spacer(1, 8))
+
+        for line in neurology_standard_sections.get("recommended_actions", [])[:5]:
+            elements.append(Paragraph(f"- {line}", styles["Normal"]))
+
+        if critical_findings:
+            elements.append(Spacer(1, 8))
+            elements.append(Paragraph("Critical Findings", styles["Heading2"]))
+            for item in critical_findings[:8]:
+                title_text = item.get("title") or item.get("category") or "Critical finding"
+                description = item.get("description") or ""
+                elements.append(Paragraph(f"- {title_text}: {description}", styles["Normal"]))
+
+        doc.build(elements)
+    except Exception as exc:
+        logger.warning(f"Report PDF generation fallback for {scan_id} ({mode}): {exc}")
+        fallback_lines = [
+            title,
+            f"Scan ID: {scan_id}",
+            f"Generated: {_now_iso()}",
+            f"Risk: {quantitative_metrics.get('risk_band', 'unknown')}",
+            f"Triage score: {quantitative_metrics.get('triage_score', 'n/a')}",
+            str(report_sections.get("impression", "No impression available.")),
+            str(report_sections.get("risk_statement", "")),
+        ]
+        _write_minimal_pdf(pdf_path, fallback_lines)
+
+    if not pdf_path.exists():
+        _write_minimal_pdf(
+            pdf_path,
+            [
+                title,
+                f"Scan ID: {scan_id}",
+                "Report artifact generated with minimal PDF fallback.",
+            ],
+        )
+
+    return pdf_path
+
+
 def _build_uploaded_analysis_payload(
     scan_id: str,
     source_path: Path,
@@ -2290,6 +2649,79 @@ _DEMO_PATIENT_SCENARIOS = [
             "Parietal_Inf_L": 2,
             "Hippocampus_L": 1,
             "Hippocampus_R": 1,
+        },
+    },
+    {
+        "patient_id": "demo-patient-004",
+        "patient_code": "BS-039",
+        "display_name": "Darius Ng",
+        "age": 35,
+        "sex": "M",
+        "scan_id": "demo-scan-004",
+        "modality": "fMRI",
+        "study_date": "2026-03-11",
+        "previous_study_date": "2026-01-27",
+        "risk_band": "high",
+        "primary_concern": "Post-op motor planning decline and right-arm weakness",
+        "trend": "worsening",
+        "executive_summary": "Severe left precentral and supplementary frontal burden with mild contralateral recruitment.",
+        "previous_summary": "Prior study showed moderate left motor-strip burden without severe extension.",
+        "overall_confidence": 0.89,
+        "previous_confidence": 0.84,
+        "overrides": {
+            "Precentral_L": 4,
+            "Frontal_Sup_L": 3,
+            "Precentral_R": 2,
+            "Parietal_Inf_L": 2,
+        },
+    },
+    {
+        "patient_id": "demo-patient-005",
+        "patient_code": "BS-052",
+        "display_name": "Sofia Alvarez",
+        "age": 71,
+        "sex": "F",
+        "scan_id": "demo-scan-005",
+        "modality": "MRI_T1",
+        "study_date": "2026-02-25",
+        "previous_study_date": "2025-12-03",
+        "risk_band": "moderate",
+        "primary_concern": "Progressive executive dysfunction and slowed processing",
+        "trend": "stable",
+        "executive_summary": "Moderate bilateral superior frontal burden with mild bilateral hippocampal extension.",
+        "previous_summary": "Frontal network involvement remains moderate with limited interval change.",
+        "overall_confidence": 0.9,
+        "previous_confidence": 0.88,
+        "overrides": {
+            "Frontal_Sup_L": 3,
+            "Frontal_Sup_R": 3,
+            "Hippocampus_L": 2,
+            "Hippocampus_R": 2,
+            "Temporal_Mid_L": 2,
+        },
+    },
+    {
+        "patient_id": "demo-patient-006",
+        "patient_code": "BS-066",
+        "display_name": "Jonah Reed",
+        "age": 29,
+        "sex": "M",
+        "scan_id": "demo-scan-006",
+        "modality": "DTI",
+        "study_date": "2026-03-14",
+        "previous_study_date": "2026-01-02",
+        "risk_band": "low",
+        "primary_concern": "Concussion follow-up with persistent visual fatigue",
+        "trend": "improving",
+        "executive_summary": "Mild right occipital-temporal burden with near-resolution of prior diffuse posterior findings.",
+        "previous_summary": "Prior scan showed broader posterior burden now regressing toward baseline.",
+        "overall_confidence": 0.84,
+        "previous_confidence": 0.79,
+        "overrides": {
+            "Occipital_Sup_R": 2,
+            "Temporal_Mid_R": 2,
+            "Parietal_Inf_R": 1,
+            "Precentral_R": 1,
         },
     },
 ]

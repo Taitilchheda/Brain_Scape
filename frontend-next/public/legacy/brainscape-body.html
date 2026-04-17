@@ -112,6 +112,19 @@
                 <div class="viewer-surface">
                     <canvas id="brain-canvas" aria-label="3D brain viewer"></canvas>
 
+                    <div id="render-loader-overlay" class="render-loader-overlay" aria-live="polite">
+                        <div class="render-loader-card">
+                            <div class="render-loader-header">
+                                <span class="render-loader-spinner" aria-hidden="true"></span>
+                                <strong id="render-loader-title">Preparing 3D renderer</strong>
+                            </div>
+                            <div id="render-loader-detail" class="render-loader-detail">Initializing anatomical mapping pipeline...</div>
+                            <div class="render-loader-track">
+                                <div id="render-loader-progress" class="render-loader-progress"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="upload-overlay">
                         <div class="upload-card" id="drop-zone">
                             <h2>Load a neuro scan</h2>
@@ -127,6 +140,17 @@
 
                     <div class="viewer-pick-info" id="viewer-pick-info">Click any cortical area in the 3D view to inspect the nearest affected region.</div>
                     <div class="viewer-tool-output" id="viewer-tool-output">Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.</div>
+
+                    <div class="viewer-insights" id="viewer-insights" aria-live="polite">
+                        <div class="viewer-insights-head">
+                            <span>Key Insights</span>
+                            <span id="viewer-insights-risk" class="risk-chip low">n/a</span>
+                        </div>
+                        <div id="viewer-insights-list" class="viewer-insights-list">
+                            <div class="insight-item muted">Load a scan to view top neurological findings and confidence context.</div>
+                        </div>
+                    </div>
+
                     <div class="viewer-bookmarks" id="viewer-bookmarks">
                         <div class="region-item muted">No lesion bookmarks yet.</div>
                     </div>

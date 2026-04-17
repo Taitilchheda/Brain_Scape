@@ -140,6 +140,21 @@ class TestReportEndpoint:
         # May return 200 or 404 depending on whether scan exists
         assert response.status_code in [200, 404]
 
+    def test_report_generates_pdf_for_demo_scan_modes(self, client, clinician_token):
+        """Report endpoint should return a valid PDF artifact URL for both report modes."""
+        for mode in ["clinician", "patient"]:
+            response = client.get(
+                f"/report/demo-scan-002?mode={mode}",
+                headers={"Authorization": f"Bearer {clinician_token}"},
+            )
+            assert response.status_code == 200
+
+            payload = response.json()
+            assert payload["pdf_url"].startswith("/outputs/reports/demo-scan-002/")
+
+            artifact = Path("outputs") / payload["pdf_url"].replace("/outputs/", "")
+            assert artifact.exists()
+
 
 class TestQueryEndpoint:
     """Test the Q&A endpoint."""
