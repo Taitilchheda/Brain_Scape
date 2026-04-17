@@ -454,6 +454,39 @@
             -webkit-backdrop-filter: blur(8px);
         }
 
+        .viewer-reference {
+            position: absolute;
+            top: 0.72rem;
+            left: 0.72rem;
+            width: min(300px, calc(100% - 1.44rem));
+            border-radius: 11px;
+            border: 1px solid rgba(196, 220, 247, 0.88);
+            background: rgba(244, 251, 255, 0.8);
+            padding: 0.38rem 0.46rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 7;
+            display: grid;
+            gap: 0.24rem;
+        }
+
+        .viewer-reference-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.48rem;
+            color: #55759a;
+            font-size: 0.72rem;
+            line-height: 1.28;
+        }
+
+        .viewer-reference-row strong {
+            color: #1c4f80;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-align: right;
+        }
+
         .render-loader-overlay {
             position: absolute;
             inset: 0;
@@ -1885,6 +1918,12 @@
                 font-size: 0.73rem;
             }
 
+            .viewer-reference {
+                max-height: 34%;
+                overflow: auto;
+                padding: 0.34rem 0.4rem;
+            }
+
             .upload-card {
                 padding: 1.1rem;
                 border-radius: 16px;
@@ -1948,6 +1987,12 @@
 
             .viewer-toolbar-actions {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .viewer-reference {
+                top: 0.62rem;
+                padding: 0.3rem 0.36rem;
+                width: min(276px, calc(100% - 1.24rem));
             }
 
             .viewer-insights {

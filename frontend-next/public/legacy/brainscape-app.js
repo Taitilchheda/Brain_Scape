@@ -52,8 +52,14 @@
 
         let scene;
         let camera;
+        let perspectiveCamera;
+        let orthographicCamera;
         let renderer;
         let controls;
+        let activeProjectionMode = "perspective";
+        let viewerReferenceGrid = null;
+        let viewerReferenceAxes = null;
+        let viewerReferenceCage = null;
         let brainGroup = null;
         let volumeGroup = null;
         let volumeTexture = null;
@@ -164,10 +170,15 @@
             },
             viewerTools: {
                 mode: "",
+                measureType: "distance",
                 measureStart: null,
+                measurePoints: [],
                 measureVisual: null,
                 bookmarks: [],
                 bookmarkMarkers: [],
+                showGrid: true,
+                showAxes: true,
+                lastCoordinateMm: { x: 0, y: 0, z: 0 },
             },
         };
 
@@ -465,6 +476,8 @@
             if (!scene || !activeDicomVolume) return;
 
             const point = voxelToNormalized(activeDicomVolume, clinicalState.navVoxel);
+            clinicalState.viewerTools.lastCoordinateMm = pointToApproxMm(point);
+            updateViewerReferenceReadout();
             clearViewerFocus();
 
             const markerGeo = new THREE.SphereGeometry(0.03, 16, 16);
@@ -481,6 +494,180 @@
             updateViewerPickInfo(`Crosshair focus synced to 3D: (${point.x.toFixed(2)}, ${point.y.toFixed(2)}, ${point.z.toFixed(2)})`);
         }
 
+        function configureOrbitControls(controlInstance) {
+            controlInstance.enableDamping = true;
+            controlInstance.dampingFactor = 0.05;
+            controlInstance.rotateSpeed = 0.48;
+            controlInstance.autoRotate = false;
+            controlInstance.autoRotateSpeed = 1.2;
+            controlInstance.zoomSpeed = 0.88;
+        }
+
+        function updateOrthographicFrustum(width, height) {
+            if (!orthographicCamera) return;
+            const safeHeight = Math.max(1, Number(height) || 1);
+            const aspect = Math.max(0.25, Math.min(4, (Number(width) || 1) / safeHeight));
+            const frustumSize = 2.4;
+            orthographicCamera.left = -frustumSize * aspect;
+            orthographicCamera.right = frustumSize * aspect;
+            orthographicCamera.top = frustumSize;
+            orthographicCamera.bottom = -frustumSize;
+            orthographicCamera.updateProjectionMatrix();
+        }
+
+        function syncViewerReferenceToggles() {
+            const gridButton = document.getElementById("btn-toggle-grid");
+            const axesButton = document.getElementById("btn-toggle-axes");
+            if (gridButton) {
+                gridButton.classList.toggle("active", Boolean(clinicalState.viewerTools.showGrid));
+                gridButton.textContent = clinicalState.viewerTools.showGrid ? "Grid On" : "Grid Off";
+            }
+            if (axesButton) {
+                axesButton.classList.toggle("active", Boolean(clinicalState.viewerTools.showAxes));
+                axesButton.textContent = clinicalState.viewerTools.showAxes ? "Axes On" : "Axes Off";
+            }
+        }
+
+        function updateProjectionButtons() {
+            const perspective = document.getElementById("btn-projection-perspective");
+            const orthographic = document.getElementById("btn-projection-orthographic");
+            if (perspective) {
+                const active = activeProjectionMode === "perspective";
+                perspective.classList.toggle("active", active);
+            }
+            if (orthographic) {
+                const active = activeProjectionMode === "orthographic";
+                orthographic.classList.toggle("active", active);
+            }
+        }
+
+        function updateViewerReferenceReadout() {
+            const projectionValue = document.getElementById("viewer-projection-value");
+            const coordinateValue = document.getElementById("viewer-coordinate-value");
+            const measureValue = document.getElementById("viewer-measure-mode-value");
+
+            if (projectionValue) {
+                projectionValue.textContent = activeProjectionMode === "orthographic" ? "Orthographic" : "Perspective";
+            }
+
+            if (measureValue) {
+                if (clinicalState.viewerTools.mode === "measure") {
+                    measureValue.textContent = clinicalState.viewerTools.measureType === "angle" ? "Angle" : "Distance";
+                } else {
+                    measureValue.textContent = "Off";
+                }
+            }
+
+            if (coordinateValue) {
+                const coords = clinicalState.viewerTools.lastCoordinateMm || { x: 0, y: 0, z: 0 };
+                coordinateValue.textContent = `x ${coords.x.toFixed(1)}, y ${coords.y.toFixed(1)}, z ${coords.z.toFixed(1)} mm`;
+            }
+        }
+
+        function setViewerGridVisible(forceValue = null) {
+            const nextVisible = typeof forceValue === "boolean"
+                ? forceValue
+                : !Boolean(clinicalState.viewerTools.showGrid);
+            clinicalState.viewerTools.showGrid = nextVisible;
+            if (viewerReferenceGrid) viewerReferenceGrid.visible = nextVisible;
+            if (viewerReferenceCage) viewerReferenceCage.visible = nextVisible;
+            syncViewerReferenceToggles();
+        }
+
+        function setViewerAxesVisible(forceValue = null) {
+            const nextVisible = typeof forceValue === "boolean"
+                ? forceValue
+                : !Boolean(clinicalState.viewerTools.showAxes);
+            clinicalState.viewerTools.showAxes = nextVisible;
+            if (viewerReferenceAxes) viewerReferenceAxes.visible = nextVisible;
+            syncViewerReferenceToggles();
+        }
+
+        function initializeViewerReferenceGeometry() {
+            if (!scene) return;
+
+            if (viewerReferenceGrid) scene.remove(viewerReferenceGrid);
+            if (viewerReferenceCage) scene.remove(viewerReferenceCage);
+            if (viewerReferenceAxes) scene.remove(viewerReferenceAxes);
+
+            viewerReferenceGrid = new THREE.GridHelper(2.8, 28, 0x3f79bc, 0x97bce3);
+            viewerReferenceGrid.position.y = -1.05;
+            if (Array.isArray(viewerReferenceGrid.material)) {
+                viewerReferenceGrid.material.forEach((material) => {
+                    material.transparent = true;
+                    material.opacity = 0.32;
+                    material.depthWrite = false;
+                });
+            } else if (viewerReferenceGrid.material) {
+                viewerReferenceGrid.material.transparent = true;
+                viewerReferenceGrid.material.opacity = 0.32;
+                viewerReferenceGrid.material.depthWrite = false;
+            }
+
+            viewerReferenceCage = new THREE.LineSegments(
+                new THREE.EdgesGeometry(new THREE.BoxGeometry(2.08, 2.08, 2.08)),
+                new THREE.LineBasicMaterial({ color: 0x6ba5dd, transparent: true, opacity: 0.3 })
+            );
+
+            viewerReferenceAxes = new THREE.AxesHelper(1.38);
+            if (Array.isArray(viewerReferenceAxes.material)) {
+                viewerReferenceAxes.material.forEach((material) => {
+                    material.transparent = true;
+                    material.opacity = 0.78;
+                    material.depthTest = false;
+                });
+            }
+            viewerReferenceAxes.renderOrder = 60;
+
+            scene.add(viewerReferenceGrid);
+            scene.add(viewerReferenceCage);
+            scene.add(viewerReferenceAxes);
+
+            setViewerGridVisible(Boolean(clinicalState.viewerTools.showGrid));
+            setViewerAxesVisible(Boolean(clinicalState.viewerTools.showAxes));
+        }
+
+        function copyCameraPose(source, target) {
+            if (!source || !target) return;
+            target.position.copy(source.position);
+            target.quaternion.copy(source.quaternion);
+            target.zoom = source.zoom || 1;
+            target.updateProjectionMatrix();
+        }
+
+        function setProjectionMode(mode) {
+            if (!renderer || !perspectiveCamera || !orthographicCamera) return;
+            const nextMode = mode === "orthographic" ? "orthographic" : "perspective";
+            if (nextMode === activeProjectionMode && camera) {
+                updateProjectionButtons();
+                updateViewerReferenceReadout();
+                return;
+            }
+
+            const nextCamera = nextMode === "orthographic" ? orthographicCamera : perspectiveCamera;
+            const currentTarget = controls ? controls.target.clone() : new THREE.Vector3(0, 0, 0);
+            const currentAutoRotate = controls ? controls.autoRotate : false;
+            if (camera) {
+                copyCameraPose(camera, nextCamera);
+            }
+
+            if (controls) {
+                controls.dispose();
+            }
+
+            camera = nextCamera;
+            controls = new OrbitControls(camera, renderer.domElement);
+            configureOrbitControls(controls);
+            controls.autoRotate = currentAutoRotate;
+            controls.target.copy(currentTarget);
+            controls.update();
+
+            activeProjectionMode = nextMode;
+            updateAutoRotateButton();
+            updateProjectionButtons();
+            updateViewerReferenceReadout();
+        }
+
         function initScene() {
             const canvas = document.getElementById("brain-canvas");
             if (!canvas) return;
@@ -489,8 +676,12 @@
             scene.background = new THREE.Color(0xf3f7fd);
 
             const container = canvas.parentElement;
-            camera = new THREE.PerspectiveCamera(44, container.clientWidth / container.clientHeight, 0.01, 100);
-            camera.position.set(0, 0, 3);
+            perspectiveCamera = new THREE.PerspectiveCamera(44, container.clientWidth / container.clientHeight, 0.01, 100);
+            perspectiveCamera.position.set(0, 0, 3);
+            orthographicCamera = new THREE.OrthographicCamera(-2.4, 2.4, 2.4, -2.4, 0.01, 100);
+            updateOrthographicFrustum(container.clientWidth, container.clientHeight);
+            orthographicCamera.position.copy(perspectiveCamera.position);
+            camera = perspectiveCamera;
 
             renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
             renderer.setSize(container.clientWidth, container.clientHeight);
@@ -503,11 +694,7 @@
             }
 
             controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.rotateSpeed = 0.48;
-            controls.autoRotate = false;
-            controls.autoRotateSpeed = 1.2;
+            configureOrbitControls(controls);
 
             raycaster = new THREE.Raycaster();
             pointer = new THREE.Vector2();
@@ -523,12 +710,18 @@
             rimLight.position.set(-2, 3, 7);
             scene.add(rimLight);
 
+            initializeViewerReferenceGeometry();
+            syncViewerReferenceToggles();
+            updateProjectionButtons();
+            updateViewerReferenceReadout();
+
             canvas.addEventListener("click", handleBrainCanvasClick);
 
             window.addEventListener("resize", () => {
                 const c = canvas.parentElement;
-                camera.aspect = c.clientWidth / c.clientHeight;
-                camera.updateProjectionMatrix();
+                perspectiveCamera.aspect = c.clientWidth / c.clientHeight;
+                perspectiveCamera.updateProjectionMatrix();
+                updateOrthographicFrustum(c.clientWidth, c.clientHeight);
                 renderer.setSize(c.clientWidth, c.clientHeight);
                 renderDicomSlice();
             });
@@ -555,6 +748,9 @@
             camera.position.set(target[0], target[1], target[2]);
             controls.target.set(0, 0, 0);
             controls.update();
+
+            const mirrorTarget = camera === perspectiveCamera ? orthographicCamera : perspectiveCamera;
+            copyCameraPose(camera, mirrorTarget);
         }
 
         function updateAutoRotateButton() {
@@ -699,16 +895,24 @@
 
         function updateViewerToolButtons() {
             const mode = clinicalState.viewerTools.mode;
-            const measure = document.getElementById("btn-3d-measure");
+            const measureDistance = document.getElementById("btn-3d-measure");
+            const measureAngle = document.getElementById("btn-3d-measure-angle");
             const bookmark = document.getElementById("btn-3d-bookmark");
-            if (measure) measure.classList.toggle("active", mode === "measure");
+            if (measureDistance) {
+                measureDistance.classList.toggle("active", mode === "measure" && clinicalState.viewerTools.measureType === "distance");
+            }
+            if (measureAngle) {
+                measureAngle.classList.toggle("active", mode === "measure" && clinicalState.viewerTools.measureType === "angle");
+            }
             if (bookmark) bookmark.classList.toggle("active", mode === "bookmark");
+            updateViewerReferenceReadout();
         }
 
         function setViewerToolMode(mode) {
             const nextMode = clinicalState.viewerTools.mode === mode ? "" : mode;
             clinicalState.viewerTools.mode = nextMode;
             clinicalState.viewerTools.measureStart = null;
+            clinicalState.viewerTools.measurePoints = [];
 
             if (clinicalState.trajectory.activeMode) {
                 clinicalState.trajectory.activeMode = "";
@@ -717,11 +921,34 @@
 
             updateViewerToolButtons();
             if (nextMode === "measure") {
-                updateViewerToolOutput("3D Measure active: click two cortical points to compute physical distance.");
+                if (clinicalState.viewerTools.measureType === "angle") {
+                    updateViewerToolOutput("3D angle mode active: select first arm point, vertex, then second arm point.");
+                } else {
+                    updateViewerToolOutput("3D distance mode active: click two cortical points to compute physical distance.");
+                }
             } else if (nextMode === "bookmark") {
                 updateViewerToolOutput("Lesion Bookmark active: click affected regions to pin and track lesion checkpoints.");
             } else {
                 updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
+            }
+        }
+
+        function setViewerMeasurementType(type) {
+            const nextType = type === "angle" ? "angle" : "distance";
+            clinicalState.viewerTools.measureType = nextType;
+            clinicalState.viewerTools.measureStart = null;
+            clinicalState.viewerTools.measurePoints = [];
+            clearViewerMeasurementVisual();
+
+            if (clinicalState.viewerTools.mode !== "measure") {
+                clinicalState.viewerTools.mode = "measure";
+            }
+
+            updateViewerToolButtons();
+            if (nextType === "angle") {
+                updateViewerToolOutput("3D angle mode active: select first arm point, vertex, then second arm point.");
+            } else {
+                updateViewerToolOutput("3D distance mode active: click two cortical points to compute physical distance.");
             }
         }
 
@@ -736,7 +963,76 @@
             };
         }
 
+        function compute3DAngleDegrees(firstPoint, vertexPoint, thirdPoint) {
+            const a = new THREE.Vector3(firstPoint.x - vertexPoint.x, firstPoint.y - vertexPoint.y, firstPoint.z - vertexPoint.z);
+            const b = new THREE.Vector3(thirdPoint.x - vertexPoint.x, thirdPoint.y - vertexPoint.y, thirdPoint.z - vertexPoint.z);
+            if (a.lengthSq() <= 1e-8 || b.lengthSq() <= 1e-8) {
+                return 0;
+            }
+            a.normalize();
+            b.normalize();
+            const dot = clampValue(a.dot(b), -1, 1);
+            return THREE.MathUtils.radToDeg(Math.acos(dot));
+        }
+
         function handleViewerMeasurementClick(point, region) {
+            if (clinicalState.viewerTools.measureType === "angle") {
+                clinicalState.viewerTools.measurePoints.push({ x: point.x, y: point.y, z: point.z });
+                const points = clinicalState.viewerTools.measurePoints;
+
+                if (points.length === 1) {
+                    updateViewerToolOutput("Angle point A captured. Select the vertex point next.");
+                    return;
+                }
+                if (points.length === 2) {
+                    updateViewerToolOutput("Angle vertex captured. Select the second arm point.");
+                    return;
+                }
+
+                const [firstPoint, vertexPoint, thirdPoint] = points;
+                const angleDegrees = compute3DAngleDegrees(firstPoint, vertexPoint, thirdPoint);
+                const mmA = pointToApproxMm(firstPoint);
+                const mmB = pointToApproxMm(vertexPoint);
+                const mmC = pointToApproxMm(thirdPoint);
+                const armOne = Math.sqrt(((mmA.x - mmB.x) ** 2) + ((mmA.y - mmB.y) ** 2) + ((mmA.z - mmB.z) ** 2));
+                const armTwo = Math.sqrt(((mmC.x - mmB.x) ** 2) + ((mmC.y - mmB.y) ** 2) + ((mmC.z - mmB.z) ** 2));
+
+                clearViewerMeasurementVisual();
+                const group = new THREE.Group();
+                const segmentMaterial = new THREE.LineBasicMaterial({ color: 0x0f8a68 });
+                const pointsOne = [
+                    new THREE.Vector3(vertexPoint.x, vertexPoint.y, vertexPoint.z),
+                    new THREE.Vector3(firstPoint.x, firstPoint.y, firstPoint.z),
+                ];
+                const pointsTwo = [
+                    new THREE.Vector3(vertexPoint.x, vertexPoint.y, vertexPoint.z),
+                    new THREE.Vector3(thirdPoint.x, thirdPoint.y, thirdPoint.z),
+                ];
+                group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsOne), segmentMaterial));
+                group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsTwo), segmentMaterial));
+
+                const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x16ab7f, emissive: 0x0b6f52, emissiveIntensity: 0.2 });
+                const markerA = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), markerMaterial.clone());
+                markerA.position.set(firstPoint.x, firstPoint.y, firstPoint.z);
+                const markerB = new THREE.Mesh(new THREE.SphereGeometry(0.026, 14, 14), markerMaterial.clone());
+                markerB.position.set(vertexPoint.x, vertexPoint.y, vertexPoint.z);
+                const markerC = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 14), markerMaterial.clone());
+                markerC.position.set(thirdPoint.x, thirdPoint.y, thirdPoint.z);
+                group.add(markerA);
+                group.add(markerB);
+                group.add(markerC);
+
+                if (scene) scene.add(group);
+                clinicalState.viewerTools.measureVisual = group;
+                clinicalState.viewerTools.measurePoints = [];
+
+                const regionName = region?.anatomical_name || region?.atlas_id || "Selected target";
+                updateViewerToolOutput(
+                    `3D angle: ${angleDegrees.toFixed(1)}°. Arms: ${armOne.toFixed(1)} mm and ${armTwo.toFixed(1)} mm. Endpoint region: ${regionName}.`
+                );
+                return;
+            }
+
             const start = clinicalState.viewerTools.measureStart;
             if (!start) {
                 clinicalState.viewerTools.measureStart = { x: point.x, y: point.y, z: point.z };
@@ -774,6 +1070,7 @@
             if (scene) scene.add(group);
             clinicalState.viewerTools.measureVisual = group;
             clinicalState.viewerTools.measureStart = null;
+            clinicalState.viewerTools.measurePoints = [];
 
             const regionName = region?.anatomical_name || region?.atlas_id || "Selected target";
             updateViewerToolOutput(`3D distance: ${distanceMm.toFixed(1)} mm. Endpoint region: ${regionName}.`);
@@ -1245,6 +1542,7 @@
             if (clinicalState.viewerTools.mode) {
                 clinicalState.viewerTools.mode = "";
                 clinicalState.viewerTools.measureStart = null;
+                clinicalState.viewerTools.measurePoints = [];
                 updateViewerToolButtons();
             }
             updateTrajectoryButtons();
@@ -1388,6 +1686,9 @@
             if (hits.length === 0) return;
 
             const hit = hits[0];
+            const hitMm = pointToApproxMm(hit.point);
+            clinicalState.viewerTools.lastCoordinateMm = hitMm;
+            updateViewerReferenceReadout();
 
             if (activeDicomVolume) {
                 clinicalState.navVoxel = normalizedToVoxel(activeDicomVolume, hit.point);
@@ -4932,6 +5233,7 @@
                 clearViewerBookmarks(true);
                 clinicalState.viewerTools.mode = "";
                 clinicalState.viewerTools.measureStart = null;
+                clinicalState.viewerTools.measurePoints = [];
                 updateViewerToolButtons();
 
                 setRenderLoaderState({
@@ -5188,7 +5490,11 @@
                 updateStatus("3D viewer could not initialize in this browser. Core patient, report, and API features are still available.");
             }
             fetchDemoPatients();
+            clinicalState.viewerTools.measureType = "distance";
             setViewerCameraPreset("reset");
+            setProjectionMode("perspective");
+            setViewerGridVisible(true);
+            setViewerAxesVisible(true);
             updateAutoRotateButton();
             updateRenderModeButtons();
             setRenderMode("hybrid");
@@ -5206,6 +5512,7 @@
             updateViewerToolButtons();
             renderViewerBookmarks();
             renderViewerInsights(null, null);
+            updateViewerReferenceReadout();
             updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
 
             if (authToken) {
@@ -5223,16 +5530,23 @@
             document.getElementById("btn-view-right").addEventListener("click", () => setViewerCameraPreset("right"));
             document.getElementById("btn-view-top").addEventListener("click", () => setViewerCameraPreset("top"));
             document.getElementById("btn-view-front").addEventListener("click", () => setViewerCameraPreset("front"));
+            document.getElementById("btn-projection-perspective").addEventListener("click", () => setProjectionMode("perspective"));
+            document.getElementById("btn-projection-orthographic").addEventListener("click", () => setProjectionMode("orthographic"));
+            document.getElementById("btn-toggle-grid").addEventListener("click", () => setViewerGridVisible());
+            document.getElementById("btn-toggle-axes").addEventListener("click", () => setViewerAxesVisible());
             document.getElementById("btn-auto-rotate").addEventListener("click", toggleAutoRotate);
             document.getElementById("btn-render-hybrid").addEventListener("click", () => setRenderMode("hybrid"));
             document.getElementById("btn-render-volume").addEventListener("click", () => setRenderMode("volume"));
             document.getElementById("btn-render-surface").addEventListener("click", () => setRenderMode("surface"));
-            document.getElementById("btn-3d-measure").addEventListener("click", () => setViewerToolMode("measure"));
+            document.getElementById("btn-3d-measure").addEventListener("click", () => setViewerMeasurementType("distance"));
+            document.getElementById("btn-3d-measure-angle").addEventListener("click", () => setViewerMeasurementType("angle"));
             document.getElementById("btn-3d-bookmark").addEventListener("click", () => setViewerToolMode("bookmark"));
             document.getElementById("btn-3d-clear-measure").addEventListener("click", () => {
                 clinicalState.viewerTools.measureStart = null;
+                clinicalState.viewerTools.measurePoints = [];
                 clearViewerMeasurementVisual();
-                updateViewerToolOutput("3D measurement cleared. Click two points to start a new measurement.");
+                updateViewerToolOutput("3D measurement cleared. Select distance or angle mode to start a new measurement.");
+                updateViewerReferenceReadout();
             });
             document.getElementById("btn-3d-clear-bookmarks").addEventListener("click", () => {
                 clearViewerBookmarks();

@@ -150,6 +150,11 @@ function normalizeText(value: string | null | undefined): string {
   return String(value || "").trim();
 }
 
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 export default function ReportViewPage() {
   const params = useParams<{ scanId: string }>();
   const searchParams = useSearchParams();
@@ -266,6 +271,81 @@ export default function ReportViewPage() {
     padding: "0.66rem 0.72rem",
     background: "#f8fbff",
   };
+  const chartCardStyle = {
+    border: "1px solid #d6e6fa",
+    borderRadius: 12,
+    padding: "0.66rem 0.72rem",
+    background: "#fbfdff",
+  };
+
+  const severityDistribution = useMemo(() => {
+    const counts = {
+      Severe: 0,
+      Moderate: 0,
+      Mild: 0,
+      Healthy: 0,
+    };
+
+    findingRows.forEach((row) => {
+      const level = Number(row.severity_level || 0);
+      if (level >= 4) counts.Severe += 1;
+      else if (level === 3) counts.Moderate += 1;
+      else if (level === 2) counts.Mild += 1;
+      else counts.Healthy += 1;
+    });
+
+    return [
+      { label: "Severe", value: counts.Severe, color: "#e45b51" },
+      { label: "Moderate", value: counts.Moderate, color: "#df8a31" },
+      { label: "Mild", value: counts.Mild, color: "#d3b535" },
+      { label: "Healthy", value: counts.Healthy, color: "#4fbf78" },
+    ];
+  }, [findingRows]);
+
+  const totalSeverityCount = severityDistribution.reduce((sum, entry) => sum + entry.value, 0);
+  const severitySegments = useMemo(() => {
+    let cursor = 0;
+    return severityDistribution.map((entry) => {
+      const width = totalSeverityCount > 0 ? (entry.value / totalSeverityCount) * 100 : 0;
+      const segment = { ...entry, x: cursor, width };
+      cursor += width;
+      return segment;
+    });
+  }, [severityDistribution, totalSeverityCount]);
+
+  const burdenRows = useMemo(() => {
+    return [...findingRows]
+      .filter((row) => asNumber(row.volume_mm3) !== null || asNumber(row.volume_pct_of_region) !== null)
+      .map((row) => ({
+        label: row.region || "Unknown",
+        value: asNumber(row.volume_pct_of_region) ?? 0,
+        volume: asNumber(row.volume_mm3) ?? 0,
+      }))
+      .sort((left, right) => {
+        const leftRank = left.value > 0 ? left.value : left.volume;
+        const rightRank = right.value > 0 ? right.value : right.volume;
+        return rightRank - leftRank;
+      })
+      .slice(0, 7);
+  }, [findingRows]);
+
+  const maxBurdenValue = burdenRows.reduce((maxValue, row) => {
+    const rank = row.value > 0 ? row.value : row.volume;
+    return Math.max(maxValue, rank);
+  }, 0);
+
+  const differentialChartRows = useMemo(() => {
+    return [...differentialRows]
+      .map((row) => ({
+        label: row.etiology || "Unspecified",
+        probability: clampPercent(asNumber(row.probability_pct) ?? 0),
+      }))
+      .sort((left, right) => right.probability - left.probability)
+      .slice(0, 6);
+  }, [differentialRows]);
+
+  const confidencePercent = clampPercent(asNumber(quantitative.overall_confidence_pct as number | string | null | undefined) ?? 0);
+  const uncertaintyPercent = clampPercent((uncertaintyIndex ?? 0) * 100);
 
   return (
     <main
@@ -384,6 +464,138 @@ export default function ReportViewPage() {
                 </div>
               </div>
             </div>
+
+            {(findingRows.length > 0 || differentialRows.length > 0) && (
+              <div style={{ marginTop: "0.9rem", border: "1px solid #d6e6fa", borderRadius: 12, background: "#f8fbff", padding: "0.66rem 0.72rem" }}>
+                <h2 style={{ margin: 0, fontSize: "1rem" }}>Visual Analytics and Graphs</h2>
+                <div
+                  style={{
+                    marginTop: "0.56rem",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gap: "0.58rem",
+                  }}
+                >
+                  <div style={chartCardStyle}>
+                    <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#2a4f77" }}>Severity Distribution</h3>
+                    <svg viewBox="0 0 100 12" preserveAspectRatio="none" style={{ width: "100%", height: 24, marginTop: "0.44rem", borderRadius: 8, overflow: "hidden" }}>
+                      {severitySegments.map((segment) => (
+                        <rect
+                          key={segment.label}
+                          x={segment.x}
+                          y={0}
+                          width={segment.width}
+                          height={12}
+                          fill={segment.color}
+                          opacity={segment.width > 0 ? 0.92 : 0.15}
+                        />
+                      ))}
+                    </svg>
+                    <div style={{ marginTop: "0.38rem", display: "grid", gap: "0.18rem" }}>
+                      {severityDistribution.map((row) => (
+                        <div key={row.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.45rem", fontSize: "0.8rem", color: "#4f6f92" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.34rem" }}>
+                            <span style={{ width: 10, height: 10, borderRadius: 999, background: row.color }} />
+                            {row.label}
+                          </span>
+                          <strong style={{ color: "#1f4e7d" }}>
+                            {row.value}
+                            {totalSeverityCount > 0 ? ` (${Math.round((row.value / totalSeverityCount) * 100)}%)` : ""}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={chartCardStyle}>
+                    <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#2a4f77" }}>Top Regional Burden</h3>
+                    <div style={{ marginTop: "0.42rem", display: "grid", gap: "0.3rem" }}>
+                      {burdenRows.length === 0 && (
+                        <div style={{ fontSize: "0.82rem", color: "#59789b" }}>Regional burden bars will appear when finding rows include burden values.</div>
+                      )}
+                      {burdenRows.map((row, index) => {
+                        const score = row.value > 0 ? row.value : row.volume;
+                        const width = maxBurdenValue > 0 ? clampPercent((score / maxBurdenValue) * 100) : 0;
+                        return (
+                          <div key={`${row.label}-${index}`} style={{ display: "grid", gap: "0.14rem" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.45rem", fontSize: "0.77rem", color: "#537396" }}>
+                              <span>{row.label}</span>
+                              <strong style={{ color: "#1f4f7d" }}>
+                                {row.value > 0 ? `${row.value.toFixed(1)}%` : `${row.volume.toFixed(1)} mm3`}
+                              </strong>
+                            </div>
+                            <div style={{ width: "100%", height: 9, borderRadius: 999, background: "#e7f0fb", overflow: "hidden" }}>
+                              <div style={{ width: `${width}%`, height: "100%", background: "linear-gradient(90deg, #2c83d6, #59b6ff)" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={chartCardStyle}>
+                    <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#2a4f77" }}>Differential Probability Profile</h3>
+                    <div style={{ marginTop: "0.42rem", display: "grid", gap: "0.3rem" }}>
+                      {differentialChartRows.length === 0 && (
+                        <div style={{ fontSize: "0.82rem", color: "#59789b" }}>Differential graph appears once ranked etiologies are available.</div>
+                      )}
+                      {differentialChartRows.map((row, index) => (
+                        <div key={`${row.label}-${index}`} style={{ display: "grid", gap: "0.14rem" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.45rem", fontSize: "0.77rem", color: "#537396" }}>
+                            <span>{row.label}</span>
+                            <strong style={{ color: "#1f4f7d" }}>{row.probability.toFixed(1)}%</strong>
+                          </div>
+                          <div style={{ width: "100%", height: 9, borderRadius: 999, background: "#eef4fb", overflow: "hidden" }}>
+                            <div style={{ width: `${row.probability}%`, height: "100%", background: "linear-gradient(90deg, #4e83da, #72c1ff)" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={chartCardStyle}>
+                    <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#2a4f77" }}>Confidence and Uncertainty Gauge</h3>
+                    <div style={{ marginTop: "0.5rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                      <div style={{ display: "grid", justifyItems: "center", gap: "0.26rem" }}>
+                        <div
+                          style={{
+                            width: 78,
+                            height: 78,
+                            borderRadius: "50%",
+                            background: `conic-gradient(#2d88dc 0 ${confidencePercent}%, #d7e6f8 ${confidencePercent}% 100%)`,
+                            display: "grid",
+                            placeItems: "center",
+                          }}
+                        >
+                          <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#fbfdff", display: "grid", placeItems: "center", fontSize: "0.8rem", color: "#26517f", fontWeight: 700 }}>
+                            {confidencePercent.toFixed(0)}%
+                          </div>
+                        </div>
+                        <div style={{ fontSize: "0.76rem", color: "#4d6f93" }}>Confidence</div>
+                      </div>
+
+                      <div style={{ display: "grid", justifyItems: "center", gap: "0.26rem" }}>
+                        <div
+                          style={{
+                            width: 78,
+                            height: 78,
+                            borderRadius: "50%",
+                            background: `conic-gradient(#f29b38 0 ${uncertaintyPercent}%, #f5e7d6 ${uncertaintyPercent}% 100%)`,
+                            display: "grid",
+                            placeItems: "center",
+                          }}
+                        >
+                          <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#fbfdff", display: "grid", placeItems: "center", fontSize: "0.8rem", color: "#7b4f1a", fontWeight: 700 }}>
+                            {uncertaintyPercent.toFixed(0)}%
+                          </div>
+                        </div>
+                        <div style={{ fontSize: "0.76rem", color: "#4d6f93" }}>Uncertainty</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ marginTop: "0.9rem", border: "1px solid #d8e6f7", borderRadius: 12, padding: "0.65rem", background: "#f9fcff" }}>
               <div><strong>Impression:</strong> {report.report_sections?.impression || neurologySections?.impression || "-"}</div>

@@ -71,11 +71,16 @@
                         <button class="viewer-tool-btn" id="btn-view-right" type="button">Right</button>
                         <button class="viewer-tool-btn" id="btn-view-top" type="button">Top</button>
                         <button class="viewer-tool-btn" id="btn-view-front" type="button">Front</button>
+                        <button class="viewer-tool-btn active" id="btn-projection-perspective" type="button">Perspective</button>
+                        <button class="viewer-tool-btn" id="btn-projection-orthographic" type="button">Orthographic</button>
+                        <button class="viewer-tool-btn active" id="btn-toggle-grid" type="button">Grid On</button>
+                        <button class="viewer-tool-btn active" id="btn-toggle-axes" type="button">Axes On</button>
                         <button class="viewer-tool-btn" id="btn-auto-rotate" type="button">Auto Rotate Off</button>
                         <button class="viewer-tool-btn active" id="btn-render-hybrid" type="button">Hybrid</button>
                         <button class="viewer-tool-btn" id="btn-render-volume" type="button">Volume</button>
                         <button class="viewer-tool-btn" id="btn-render-surface" type="button">Surface</button>
-                        <button class="viewer-tool-btn" id="btn-3d-measure" type="button">3D Measure</button>
+                        <button class="viewer-tool-btn" id="btn-3d-measure" type="button">Measure Distance</button>
+                        <button class="viewer-tool-btn" id="btn-3d-measure-angle" type="button">Measure Angle</button>
                         <button class="viewer-tool-btn" id="btn-3d-clear-measure" type="button">Clear Measure</button>
                         <button class="viewer-tool-btn" id="btn-3d-bookmark" type="button">Lesion Bookmark</button>
                         <button class="viewer-tool-btn" id="btn-3d-clear-bookmarks" type="button">Clear Bookmarks</button>
@@ -140,6 +145,21 @@
 
                     <div class="viewer-pick-info" id="viewer-pick-info">Click any cortical area in the 3D view to inspect the nearest affected region.</div>
                     <div class="viewer-tool-output" id="viewer-tool-output">Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.</div>
+
+                    <div class="viewer-reference" id="viewer-reference" aria-live="polite">
+                        <div class="viewer-reference-row">
+                            <span>Projection</span>
+                            <strong id="viewer-projection-value">Perspective</strong>
+                        </div>
+                        <div class="viewer-reference-row">
+                            <span>Coordinates</span>
+                            <strong id="viewer-coordinate-value">x 0.0, y 0.0, z 0.0 mm</strong>
+                        </div>
+                        <div class="viewer-reference-row">
+                            <span>Measure Mode</span>
+                            <strong id="viewer-measure-mode-value">Distance</strong>
+                        </div>
+                    </div>
 
                     <div class="viewer-insights" id="viewer-insights" aria-live="polite">
                         <div class="viewer-insights-head">
