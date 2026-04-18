@@ -161,6 +161,7 @@ class PatientCreateRequest(BaseModel):
 _job_store: dict[str, dict] = {}
 _UPLOADED_ANALYSES: dict[str, dict] = {}
 _VOLUME_PAYLOAD_CACHE: dict[str, dict] = {}
+_VOLUME_PAYLOAD_SCHEMA_VERSION = "ras-canonical-v2-zyx-pack"
 _RUNTIME_CONTEXT_STORE: dict[str, dict[str, Any]] = {}
 _SIGNOFF_STORE: dict[str, list[dict[str, Any]]] = {}
 _CRITICAL_ACK_STORE: dict[str, list[dict[str, Any]]] = {}
@@ -956,6 +957,7 @@ async def get_mesh(
         scan_id,
         mesh_quality=mesh_info.get("mesh_quality"),
         source_nifti=mesh_info.get("source_nifti"),
+        synthetic_fallback=mesh_info.get("synthetic_fallback"),
     )
 
     decorated = _decorate_analysis_payload(scan_id, analysis)
@@ -2860,6 +2862,53 @@ def _normalize_patient_record(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_placeholder_upload_identity(
+    patient_id: str,
+    patient_code: str,
+    display_name: str,
+    source: str = "",
+) -> bool:
+    pid = str(patient_id or "").strip().lower()
+    code = str(patient_code or "").strip().upper()
+    name = str(display_name or "").strip().lower()
+    src = str(source or "").strip().lower()
+
+    if pid.startswith("upload-"):
+        return True
+    if code.startswith("UPLOAD-"):
+        return True
+    if src == "recovered" and name in {"", "uploaded patient", "recovered uploaded patient"}:
+        return True
+    return False
+
+
+def _is_placeholder_upload_patient_record(record: dict[str, Any]) -> bool:
+    return _is_placeholder_upload_identity(
+        patient_id=str(record.get("patient_id") or ""),
+        patient_code=str(record.get("patient_code") or ""),
+        display_name=str(record.get("display_name") or record.get("patient_name") or ""),
+        source=str(record.get("source") or ""),
+    )
+
+
+def _prune_placeholder_upload_patients_from_registry() -> None:
+    placeholder_ids = {
+        str(patient.get("patient_id") or "")
+        for patient in _DEMO_PATIENTS
+        if _is_placeholder_upload_patient_record(patient)
+    }
+    if not placeholder_ids:
+        return
+
+    _DEMO_PATIENTS[:] = [
+        patient
+        for patient in _DEMO_PATIENTS
+        if str(patient.get("patient_id") or "") not in placeholder_ids
+    ]
+    for patient_id in placeholder_ids:
+        _DEMO_PATIENT_TIMELINES.pop(patient_id, None)
+
+
 def _persist_custom_patients() -> None:
     _CUSTOM_PATIENT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(_CUSTOM_PATIENT_STORE_PATH, "w", encoding="utf-8") as f:
@@ -2885,6 +2934,8 @@ def _load_custom_patients() -> None:
         if not isinstance(record, dict):
             continue
         normalized = _normalize_patient_record(record)
+        if _is_placeholder_upload_patient_record(normalized):
+            continue
         if normalized["patient_id"] in demo_ids:
             continue
         _CUSTOM_PATIENTS.append(normalized)
@@ -2933,6 +2984,14 @@ def _recover_patients_from_saved_analyses() -> None:
 
         patient_id = str(analysis.get("patient_id") or "")
         if not patient_id or patient_id in known_ids:
+            continue
+
+        if _is_placeholder_upload_identity(
+            patient_id=patient_id,
+            patient_code=str(analysis.get("patient_code") or ""),
+            display_name=str(analysis.get("patient_name") or ""),
+            source="recovered",
+        ):
             continue
 
         scan_id = str(analysis.get("scan_id") or "")
@@ -3030,6 +3089,7 @@ def _attach_scan_to_patient(patient: Optional[dict[str, Any]], analysis: dict[st
 
 _load_custom_patients()
 _recover_patients_from_saved_analyses()
+_prune_placeholder_upload_patients_from_registry()
 
 
 def _find_demo_patient(patient_id: str) -> Optional[dict]:
@@ -3077,9 +3137,18 @@ _DEMO_SCAN_SOURCE_GLOBS = {
     "demo-scan-002": [
         "data/samples/ds000105/**/func/*run-01_bold.nii.gz",
         "data/samples/ds000105/**/func/*bold.nii.gz",
+        "data/raw/uploads/brainscape_sample_fmri.nii.gz",
+        "data/raw/uploads/*fmri*.nii.gz",
     ],
     "demo-scan-003": [
         "data/samples/ds000105/**/anat/*T1w.nii.gz",
+    ],
+    "demo-scan-004": [
+        "data/samples/ds000105/**/anat/*T1w.nii.gz",
+        "data/samples/ds000105/**/func/*run-01_bold.nii.gz",
+        "data/samples/ds000105/**/func/*bold.nii.gz",
+        "data/raw/uploads/brainscape_sample_fmri.nii.gz",
+        "data/raw/uploads/*fmri*.nii.gz",
     ],
 }
 
@@ -3090,6 +3159,8 @@ _MODALITY_SOURCE_GLOBS = {
     "fMRI": [
         "data/samples/ds000105/**/func/*run-01_bold.nii.gz",
         "data/samples/ds000105/**/func/*bold.nii.gz",
+        "data/raw/uploads/brainscape_sample_fmri.nii.gz",
+        "data/raw/uploads/*fmri*.nii.gz",
     ],
     "DTI": [
         "data/samples/ds000105/**/anat/*T1w.nii.gz",
@@ -3113,6 +3184,19 @@ def _resolve_demo_source_volume_path(scan_id: str, modality: str) -> Path:
     source_path = _find_first_existing_path(source_patterns)
     if source_path:
         return source_path
+
+    # If modality-specific demo data is unavailable (common for fMRI in lightweight seeds),
+    # reuse MRI T1 anatomical samples so mesh generation remains operational.
+    if modality != "MRI_T1":
+        anatomical_fallback = _find_first_existing_path(_MODALITY_SOURCE_GLOBS["MRI_T1"])
+        if anatomical_fallback:
+            logger.warning(
+                "Demo source fallback for %s (modality=%s): using anatomical sample %s",
+                scan_id,
+                modality,
+                anatomical_fallback,
+            )
+            return anatomical_fallback
 
     raise FileNotFoundError(
         f"No source MRI/fMRI NIfTI found for demo scan {scan_id} "
@@ -3241,9 +3325,12 @@ def _build_synthetic_volume_channels(
     rgba[..., 2] = np.clip(white * 255.0, 0, 255).astype(np.uint8)
     rgba[..., 3] = np.clip(damage * 255.0, 0, 255).astype(np.uint8)
 
+    # Pack to WebGL-friendly z,y,x memory order expected by Data3DTexture consumers.
+    rgba_web = np.transpose(rgba, (2, 1, 0, 3)).copy(order="C")
+
     modality = (analysis.get("modalities") or ["MRI_T1"])[0]
     spacing_mm = [1.8, 1.8, 1.8]
-    return rgba.tobytes(order="C"), tuple(int(v) for v in target_shape), spacing_mm, modality
+    return rgba_web.tobytes(order="C"), tuple(int(v) for v in target_shape), spacing_mm, modality
 
 
 def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tuple[int, int, int] = (96, 96, 96)) -> tuple[bytes, tuple[int, int, int], list[float], str]:
@@ -3252,6 +3339,8 @@ def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tu
     from scipy import ndimage
 
     img = nib.load(str(source_path))
+    # Normalize all source volumes to canonical RAS orientation so front-end axis mapping is consistent.
+    img = nib.as_closest_canonical(img)
     raw = np.asarray(img.get_fdata(dtype=np.float32))
 
     modality = (analysis.get("modalities") or ["MRI_T1"])[0]
@@ -3303,10 +3392,13 @@ def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tu
     rgba[..., 2] = np.clip(white * 255.0, 0, 255).astype(np.uint8)
     rgba[..., 3] = np.clip(damage * 255.0, 0, 255).astype(np.uint8)
 
+    # Pack to WebGL-friendly z,y,x memory order expected by Data3DTexture consumers.
+    rgba_web = np.transpose(rgba, (2, 1, 0, 3)).copy(order="C")
+
     voxel_sizes = np.array(img.header.get_zooms()[:3], dtype=np.float32)
     scaled_spacing = (voxel_sizes * (original_shape / np.array(norm.shape, dtype=np.float32))).tolist()
 
-    return rgba.tobytes(order="C"), tuple(int(v) for v in norm.shape), [float(v) for v in scaled_spacing], modality
+    return rgba_web.tobytes(order="C"), tuple(int(v) for v in norm.shape), [float(v) for v in scaled_spacing], modality
 
 
 def _build_volume_payload(
@@ -3321,9 +3413,13 @@ def _build_volume_payload(
         cache_key = (
             f"{scan_id}:{int(stat.st_mtime)}:{int(stat.st_size)}"
             f":{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+            f":{_VOLUME_PAYLOAD_SCHEMA_VERSION}"
         )
     else:
-        cache_key = f"{scan_id}:synthetic:{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+        cache_key = (
+            f"{scan_id}:synthetic:{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+            f":{_VOLUME_PAYLOAD_SCHEMA_VERSION}"
+        )
 
     cached_payload = _VOLUME_PAYLOAD_CACHE.get(cache_key)
     if cached_payload:
@@ -3371,6 +3467,8 @@ def _build_volume_payload(
         "modality": modality,
         "shape": list(shape),
         "spacing_mm": spacing_mm,
+        "orientation": "RAS",
+        "pack_order": "zyx",
         "encoding": "base64-rgba-u8",
         "volume_b64": encoded,
         "source_nifti": source_rel,
@@ -3399,6 +3497,126 @@ def _resolve_upload_sample_source(modality: str) -> Path:
     )
 
 
+def _write_procedural_demo_obj(mesh_path: Path, quality: str = "high") -> None:
+    quality_key = str(quality or "high").lower()
+    tessellation = {
+        "standard": (48, 30),
+        "high": (72, 46),
+        "extreme": (96, 62),
+    }
+    segments, rings = tessellation.get(quality_key, tessellation["high"])
+
+    lines: list[str] = [
+        "# Brain_Scape procedural demo mesh",
+        f"# quality={quality_key}",
+    ]
+
+    for ring in range(rings + 1):
+        v = ring / float(rings)
+        phi = v * math.pi
+        sin_phi = math.sin(phi)
+        cos_phi = math.cos(phi)
+        body_width = math.sin(phi)
+
+        for segment in range(segments):
+            u = segment / float(segments)
+            theta = u * (2.0 * math.pi)
+
+            # Unit sphere basis where x is left/right, y is depth, z is superior/inferior.
+            x = math.cos(theta) * sin_phi
+            y = math.sin(theta) * sin_phi
+            z = cos_phi
+
+            # Ellipsoid baseline with broader middle and tapered poles.
+            x *= 1.02
+            y *= 0.70
+            z *= 0.98
+            x *= 0.90 + (0.28 * body_width)
+
+            # Interhemispheric fissure (subtle groove), without opening the mesh.
+            fissure_band = max(0.0, 0.26 - abs(x))
+            if fissure_band > 0.0:
+                fissure_strength = (fissure_band / 0.26) ** 1.5
+                hemi_sign = 1.0 if x >= 0.0 else -1.0
+                x += hemi_sign * (0.20 * fissure_strength)
+                y -= 0.03 * fissure_strength
+
+            # Flatten superior/inferior poles so fallback does not read as a sphere.
+            if z > 0.82:
+                z = 0.82 + ((z - 0.82) * 0.45)
+            if z < -0.52:
+                z = -0.52 + ((z + 0.52) * 0.42)
+
+            # Mild temporal/frontal lobe contouring.
+            temporal_bulge = math.exp(-((z - 0.02) ** 2) / 0.28) * math.exp(-((abs(y) - 0.08) ** 2) / 0.46)
+            frontal_bulge = math.exp(-((y - 0.52) ** 2) / 0.20) * math.exp(-(z ** 2) / 0.70)
+            x *= 1.0 + (0.11 * temporal_bulge) + (0.05 * frontal_bulge)
+
+            # Low-amplitude gyral undulation.
+            gyral = (
+                math.sin((theta * 9.5) + (phi * 2.0))
+                + (0.6 * math.sin((theta * 17.0) - (phi * 3.2)))
+            ) * 0.015
+            x *= (1.0 + gyral)
+            y *= (1.0 + (gyral * 0.62))
+            z *= (1.0 + (gyral * 0.55))
+
+            lines.append(f"v {x:.6f} {y:.6f} {z:.6f}")
+
+    stride = segments
+    for ring in range(rings):
+        for segment in range(segments):
+            next_segment = (segment + 1) % segments
+
+            a = (ring * stride) + segment + 1
+            b = ((ring + 1) * stride) + segment + 1
+            c = ((ring + 1) * stride) + next_segment + 1
+            d = (ring * stride) + next_segment + 1
+
+            if ring != 0:
+                lines.append(f"f {a} {b} {d}")
+            if ring != (rings - 1):
+                lines.append(f"f {d} {b} {c}")
+
+    mesh_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _ensure_procedural_demo_mesh(
+    scan_id: str,
+    modality: str,
+    quality: str = "high",
+    force_rebuild: bool = False,
+    reason: str = "",
+    source_nifti: Optional[str] = None,
+) -> dict:
+    profile = _mesh_profile(quality)
+    output_prefix = str(profile["output_prefix"])
+    mesh_dir = _OUTPUTS_DIR / "demo_mesh" / scan_id
+    mesh_dir.mkdir(parents=True, exist_ok=True)
+    mesh_path = mesh_dir / f"{output_prefix}_synthetic_web.obj"
+
+    if force_rebuild or not mesh_path.exists():
+        _write_procedural_demo_obj(mesh_path, quality=quality)
+
+    payload = {
+        "mesh_url": f"/outputs/demo_mesh/{scan_id}/{mesh_path.name}",
+        "mesh_format": "obj",
+        "cached": not force_rebuild,
+        "mesh_path": str(mesh_path),
+        "modality": modality,
+        "mesh_quality": quality,
+        "synthetic_fallback": True,
+        "build": {
+            "mode": "procedural-demo-fallback",
+            "reason": reason or "source demo volume unavailable",
+            "requested_quality": quality,
+        },
+    }
+    if source_nifti:
+        payload["source_nifti"] = source_nifti
+    return payload
+
+
 def _ensure_demo_mesh(
     scan_id: str,
     modality: str,
@@ -3414,34 +3632,88 @@ def _ensure_demo_mesh(
     mesh_path = mesh_dir / f"{output_prefix}_web.obj"
 
     if mesh_path.exists() and not force_rebuild:
-        return {
-            "mesh_url": f"/outputs/demo_mesh/{scan_id}/{mesh_path.name}",
-            "mesh_format": "obj",
-            "cached": True,
-            "mesh_path": str(mesh_path),
-            "modality": modality,
-            "mesh_quality": quality,
-        }
+        runtime_context = _RUNTIME_CONTEXT_STORE.get(scan_id, {})
+        cached_source_nifti = str(runtime_context.get("source_nifti") or "")
+        cached_synthetic = bool(runtime_context.get("synthetic_fallback", False))
 
-    source_path = _resolve_demo_source_volume_path(scan_id, modality)
+        # If cached mesh provenance is unknown (common after code changes or old dev runs),
+        # rebuild once so the mesh is aligned with current source-resolution/fallback logic.
+        if cached_source_nifti or cached_synthetic:
+            payload = {
+                "mesh_url": f"/outputs/demo_mesh/{scan_id}/{mesh_path.name}",
+                "mesh_format": "obj",
+                "cached": True,
+                "mesh_path": str(mesh_path),
+                "modality": modality,
+                "mesh_quality": quality,
+                "synthetic_fallback": cached_synthetic,
+            }
+            if cached_source_nifti:
+                payload["source_nifti"] = cached_source_nifti
+            return payload
+
+        force_rebuild = True
+
+    try:
+        source_path = _resolve_demo_source_volume_path(scan_id, modality)
+    except FileNotFoundError as exc:
+        logger.warning(
+            "Demo mesh source unavailable for %s (%s). Falling back to procedural demo mesh.",
+            scan_id,
+            modality,
+        )
+        return _ensure_procedural_demo_mesh(
+            scan_id,
+            modality,
+            quality=quality,
+            force_rebuild=force_rebuild,
+            reason=str(exc),
+        )
+
+    try:
+        source_rel = str(source_path.relative_to(_PROJECT_DIR)).replace("\\", "/")
+    except ValueError:
+        source_rel = str(source_path)
+
+    if str(modality).upper() == "FMRI":
+        return _ensure_procedural_demo_mesh(
+            scan_id,
+            modality,
+            quality=quality,
+            force_rebuild=force_rebuild,
+            reason="fMRI demo scans use an anatomical proxy mesh for stable cortical rendering.",
+            source_nifti=source_rel,
+        )
 
     builder = MeshBuilder(
         decimation_target=int(profile["decimation_target"]),
         iso_value=float(profile["iso_value"]),
         smooth_iterations=int(profile["smooth_iterations"]),
     )
-    build_stats = builder.build(str(source_path), str(mesh_dir), output_prefix=output_prefix)
+
+    try:
+        build_stats = builder.build(str(source_path), str(mesh_dir), output_prefix=output_prefix)
+    except Exception as exc:
+        logger.exception(
+            "Demo mesh build failed for %s (%s). Falling back to procedural demo mesh: %s",
+            scan_id,
+            modality,
+            exc,
+        )
+        return _ensure_procedural_demo_mesh(
+            scan_id,
+            modality,
+            quality=quality,
+            force_rebuild=True,
+            reason=f"mesh builder failure: {exc}",
+        )
+
     build_stats["requested_quality"] = quality
 
     built_mesh_path = Path(build_stats.get("web_mesh_path", str(mesh_path)))
     if not built_mesh_path.exists():
         raise RuntimeError(f"Mesh reconstruction failed for {scan_id}; OBJ output was not created")
     resolved_quality = _mesh_quality_from_output_name(built_mesh_path.name)
-
-    try:
-        source_rel = str(source_path.relative_to(_PROJECT_DIR)).replace("\\", "/")
-    except ValueError:
-        source_rel = str(source_path)
 
     return {
         "mesh_url": f"/outputs/demo_mesh/{scan_id}/{built_mesh_path.name}",
@@ -3451,6 +3723,7 @@ def _ensure_demo_mesh(
         "source_nifti": source_rel,
         "modality": modality,
         "mesh_quality": resolved_quality,
+        "synthetic_fallback": False,
         "build": build_stats,
     }
 
@@ -3559,7 +3832,12 @@ async def list_patients(current_user: dict = Depends(get_current_user)):
         action="GET /patients",
         outcome="ALLOWED",
     )
-    return {"patients": _DEMO_PATIENTS}
+    worklist_patients = [
+        patient for patient in _DEMO_PATIENTS
+        if not _is_placeholder_upload_patient_record(patient)
+    ]
+    worklist_patients.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+    return {"patients": worklist_patients}
 
 
 @app.post("/patients")
@@ -3771,6 +4049,7 @@ async def get_demo_mesh(
         source_kind="demo",
         mesh_quality=mesh_info.get("mesh_quality"),
         source_nifti=mesh_info.get("source_nifti"),
+        synthetic_fallback=mesh_info.get("synthetic_fallback"),
     )
 
     decorated = _decorate_analysis_payload(scan_id, analysis)

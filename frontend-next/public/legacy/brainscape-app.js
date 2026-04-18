@@ -64,11 +64,11 @@
         let activeProjectionMode = "perspective";
         const VIEWER_WORLD_UP = new THREE.Vector3(0, 0, 1);
         const VIEWER_CAMERA_PRESETS = {
-            reset: [0, -3.0, 0.45],
-            left: [-3.0, -0.2, 0.45],
-            right: [3.0, -0.2, 0.45],
-            top: [0, -0.55, 2.95],
-            front: [0, -3.0, 0.45],
+            reset: [0, 3.0, 0.45],
+            left: [-3.0, 0.2, 0.45],
+            right: [3.0, 0.2, 0.45],
+            top: [0, 0.55, 2.95],
+            front: [0, 3.0, 0.45],
         };
         let viewerReferenceGrid = null;
         let viewerReferenceAxes = null;
@@ -1434,22 +1434,113 @@
             });
         }
 
+        function resolveVolumeOrientation(volumePayload) {
+            const declared = String(volumePayload?.orientation || "").trim().toUpperCase();
+            if (/^[LR][AP][SI]$/.test(declared)) {
+                return declared;
+            }
+
+            // Legacy payload compatibility: infer known sample orientation when explicit metadata is missing.
+            const source = String(volumePayload?.source_nifti || "").toLowerCase();
+            if (source.includes("ds000105") || source.includes("brainscape_sample_fmri")) {
+                return "LAS";
+            }
+
+            return "RAS";
+        }
+
+        function resolveVolumePackOrder(volumePayload) {
+            const declared = String(volumePayload?.pack_order || "").trim().toLowerCase();
+            if (declared === "zyx" || declared === "xyz") {
+                return declared;
+            }
+
+            // Legacy payloads had xyz-first packing from NumPy C-order.
+            return "xyz";
+        }
+
+        function repackLegacyVolumeXyzToZyx(packed, sx, sy, sz) {
+            const out = new Uint8Array(packed.length);
+            const planeStride = sx * sy;
+
+            for (let z = 0; z < sz; z++) {
+                for (let y = 0; y < sy; y++) {
+                    for (let x = 0; x < sx; x++) {
+                        const dstBase = (((z * planeStride) + (y * sx) + x) * 4);
+                        const srcBase = ((((x * sy) + y) * sz + z) * 4);
+
+                        out[dstBase] = packed[srcBase];
+                        out[dstBase + 1] = packed[srcBase + 1];
+                        out[dstBase + 2] = packed[srcBase + 2];
+                        out[dstBase + 3] = packed[srcBase + 3];
+                    }
+                }
+            }
+
+            return out;
+        }
+
+        function reorientPackedVolumeToRas(packed, sx, sy, sz, sourceOrientation) {
+            const orientation = String(sourceOrientation || "RAS").toUpperCase();
+            const flipX = orientation[0] === "L";
+            const flipY = orientation[1] === "P";
+            const flipZ = orientation[2] === "I";
+
+            if (!flipX && !flipY && !flipZ) {
+                return packed;
+            }
+
+            const out = new Uint8Array(packed.length);
+            const planeStride = sx * sy;
+
+            for (let z = 0; z < sz; z++) {
+                const srcZ = flipZ ? (sz - 1 - z) : z;
+                for (let y = 0; y < sy; y++) {
+                    const srcY = flipY ? (sy - 1 - y) : y;
+                    for (let x = 0; x < sx; x++) {
+                        const srcX = flipX ? (sx - 1 - x) : x;
+
+                        const dstBase = (((z * planeStride) + (y * sx) + x) * 4);
+                        const srcBase = (((srcZ * planeStride) + (srcY * sx) + srcX) * 4);
+
+                        out[dstBase] = packed[srcBase];
+                        out[dstBase + 1] = packed[srcBase + 1];
+                        out[dstBase + 2] = packed[srcBase + 2];
+                        out[dstBase + 3] = packed[srcBase + 3];
+                    }
+                }
+            }
+
+            return out;
+        }
+
         function buildVolumeSlices(volumePayload) {
             const shape = Array.isArray(volumePayload?.shape) ? volumePayload.shape : [96, 96, 96];
             const spacing = Array.isArray(volumePayload?.spacing_mm) ? volumePayload.spacing_mm : [1, 1, 1];
             const [sx, sy, sz] = shape.map((value) => Math.max(1, Number(value) || 1));
 
-            const packed = decodeBase64ToUint8Array(volumePayload.volume_b64);
+            const packedDecoded = decodeBase64ToUint8Array(volumePayload.volume_b64);
             const expectedLength = sx * sy * sz * 4;
-            if (packed.length !== expectedLength) {
-                throw new Error(`Unexpected volume payload size. expected=${expectedLength} got=${packed.length}`);
+            if (packedDecoded.length !== expectedLength) {
+                throw new Error(`Unexpected volume payload size. expected=${expectedLength} got=${packedDecoded.length}`);
             }
+
+            const sourcePackOrder = resolveVolumePackOrder(volumePayload);
+            const packedZyx = sourcePackOrder === "zyx"
+                ? packedDecoded
+                : repackLegacyVolumeXyzToZyx(packedDecoded, sx, sy, sz);
+
+            const sourceOrientation = resolveVolumeOrientation(volumePayload);
+            const packed = reorientPackedVolumeToRas(packedZyx, sx, sy, sz, sourceOrientation);
 
             activeSurfaceDamageVolume = {
                 width: sx,
                 height: sy,
                 depth: sz,
                 voxels: packed,
+                orientation: "RAS",
+                sourceOrientation,
+                sourcePackOrder,
             };
 
             const texture = new THREE.Data3DTexture(packed, sx, sy, sz);
@@ -1467,10 +1558,16 @@
             const maxScale = Math.max(scaleX, scaleY, scaleZ, 1e-6);
 
             const group = new THREE.Group();
-            group.scale.set(scaleX / maxScale, scaleY / maxScale, scaleZ / maxScale);
+            // Keep anisotropy readable without collapsing one axis into a near-slab volume.
+            const anisotropyFloor = volumePayload?.synthetic_fallback ? 0.78 : 0.72;
+            group.scale.set(
+                Math.max(anisotropyFloor, scaleX / maxScale),
+                Math.max(anisotropyFloor, scaleY / maxScale),
+                Math.max(anisotropyFloor, scaleZ / maxScale),
+            );
 
             const damageVisibility = computeDamageVisibilityFactor();
-            const densityBoost = volumePayload?.synthetic_fallback ? 1.3 : 1.78;
+            const densityBoost = volumePayload?.synthetic_fallback ? 1.12 : 1.26;
             const voxelStep = new THREE.Vector3(1 / sx, 1 / sy, 1 / sz);
 
             const axialCount = Math.max(84, Math.min(128, Math.floor(sz * 0.62)));
@@ -1523,7 +1620,8 @@
                             float whiteMatter = sampleValue.b;
                             float damage = sampleValue.a * uDamageVisibility;
                             float tissue = max(grayMatter, whiteMatter);
-                            float anatomy = max(intensity, tissue * 0.94);
+                            float blendedIntensity = (intensity * 0.62) + (tissue * 0.58);
+                            float anatomy = max(max(intensity * 0.82, tissue * 1.06), blendedIntensity);
 
                             vec3 sx0 = vec3(clamp(samplePos.x - uVoxelStep.x, 0.0, 1.0), samplePos.y, samplePos.z);
                             vec3 sx1 = vec3(clamp(samplePos.x + uVoxelStep.x, 0.0, 1.0), samplePos.y, samplePos.z);
@@ -1540,7 +1638,7 @@
                             float lambert = 0.42 + (0.58 * max(dot(normal, lightDir), 0.0));
                             float rim = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), 2.0);
 
-                            if (anatomy < 0.012 && damage < 0.006) {
+                            if (anatomy < 0.042 && damage < 0.010) {
                                 discard;
                             }
 
@@ -1555,15 +1653,16 @@
                             vec3 damageColor = mix(vec3(0.96, 0.78, 0.16), vec3(0.94, 0.18, 0.12), clamp(damage * 1.2, 0.0, 1.0));
                             vec3 finalColor = mix(baseColor, damageColor, clamp(damage * 0.56, 0.0, 0.74));
 
+                            float visibilityGate = smoothstep(0.045, 0.28, anatomy + (damage * 0.35));
                             float alpha = clamp(
-                                (anatomyResponse * 0.94) +
-                                (grayMatter * 0.20) +
+                                (anatomyResponse * 0.58) +
+                                (grayMatter * 0.19) +
                                 (whiteMatter * 0.24) +
-                                (damage * 0.28),
+                                (damage * 0.34),
                                 0.0,
                                 1.0
-                            ) * uOpacity;
-                            if (alpha < 0.0018) {
+                            ) * visibilityGate * uOpacity;
+                            if (alpha < 0.0065) {
                                 discard;
                             }
 
@@ -1954,26 +2053,62 @@
 
         function buildDemoBrain(damageData) {
             const group = new THREE.Group();
-            const geo = new THREE.SphereGeometry(1, 64, 48);
+            const geo = new THREE.IcosahedronGeometry(1, 7);
             const seed = getStringSeed(`${damageData?.patient_id || ""}-${damageData?.scan_id || ""}`);
-            const scaleX = 0.95 + ((seed % 11) * 0.006);
-            const scaleY = 0.82 + ((seed % 7) * 0.008);
-            const scaleZ = 1.08 + ((seed % 9) * 0.006);
-            geo.scale(scaleX, scaleY, scaleZ);
 
             const regions = normalizeRegions(damageData);
             const pos = geo.attributes.position;
             const colors = new Float32Array(pos.count * 3);
-            const ripple = 0.012 + ((seed % 5) * 0.0015);
+            const ripple = 0.016 + ((seed % 5) * 0.0012);
+            const seedPhase = (seed % 360) * (Math.PI / 180);
 
             for (let i = 0; i < pos.count; i++) {
-                const x = pos.getX(i);
-                const y = pos.getY(i);
-                const z = pos.getZ(i);
+                const x0 = pos.getX(i);
+                const y0 = pos.getY(i);
+                const z0 = pos.getZ(i);
+                const hemiSign = x0 >= 0 ? 1 : -1;
 
-                const split = Math.abs(x) < 0.03 ? -0.04 : 0;
-                const bump = Math.sin(x * 12) * Math.sin(y * 10) * Math.sin(z * 8) * ripple;
-                pos.setY(i, y + split + bump);
+                // Start from an ellipsoid baseline, then apply anatomical sculpting.
+                let x = x0 * (0.92 + ((seed % 7) * 0.008));
+                let y = y0 * (0.82 + ((seed % 5) * 0.007));
+                let z = z0 * (1.13 + ((seed % 9) * 0.006));
+
+                const ap = Math.max(0, Math.min(1, (z + 1.2) / 2.4));
+                const midBrainWidth = 0.9 + 0.18 * Math.sin(ap * Math.PI);
+                x *= midBrainWidth;
+
+                // Interhemispheric fissure: gently split hemispheres without pinching inward.
+                const fissureBand = Math.max(0, 0.16 - Math.abs(x));
+                if (fissureBand > 0) {
+                    const fissureStrength = (fissureBand / 0.16) ** 1.3;
+                    x += hemiSign * (0.09 * fissureStrength);
+                    y -= 0.018 * fissureStrength;
+                }
+
+                // Inferior flattening to avoid spherical base.
+                if (y < -0.62) {
+                    y = -0.62 + (y + 0.62) * 0.25;
+                }
+
+                // Keep frontal/occipital poles tighter than the mid-body width.
+                const axialFalloff = Math.max(0, 1 - Math.min(1, Math.abs(z) / 1.25));
+                x *= 0.92 + (0.16 * axialFalloff);
+
+                // Temporal/frontal bulges for a more cortical silhouette.
+                const temporalBulge = Math.exp(-((z - 0.05) ** 2) / 0.18) * Math.exp(-((Math.abs(y) - 0.12) ** 2) / 0.4);
+                const frontalBulge = Math.exp(-((z - 0.78) ** 2) / 0.1) * Math.exp(-(y ** 2) / 0.5);
+                x *= 1 + (0.12 * temporalBulge) + (0.06 * frontalBulge);
+
+                const gyralWave = (
+                    Math.sin((x + seedPhase) * 14.5) * Math.sin((y - seedPhase * 0.35) * 12.3)
+                    + Math.sin((z + seedPhase * 0.7) * 16.1)
+                ) * ripple;
+                const radial = 1 + gyralWave;
+                x *= radial;
+                y *= radial * 0.98;
+                z *= radial;
+
+                pos.setXYZ(i, x, y, z);
 
                 const severityLevel = resolveSeverityLevel(regions, x, y, z);
                 const color = DAMAGE_COLORS[severityLevel] || DAMAGE_COLORS[1];
@@ -1993,16 +2128,6 @@
 
             const mesh = new THREE.Mesh(geo, material);
             group.add(mesh);
-
-            const lineGeo = new THREE.BufferGeometry();
-            const lineVerts = [];
-            for (let i = 0; i <= 20; i++) {
-                const t = (i / 20) * Math.PI - Math.PI / 2;
-                lineVerts.push(0, Math.sin(t) * 0.86, Math.cos(t) * 1.15);
-            }
-            lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(lineVerts, 3));
-            const lineMat = new THREE.LineBasicMaterial({ color: 0x445972, opacity: 0.6, transparent: true });
-            group.add(new THREE.Line(lineGeo, lineMat));
 
             return group;
         }
@@ -2219,9 +2344,50 @@
             return geometry;
         }
 
-        function buildBrainFromObj(objectRoot) {
+        function addCorticalRelief(sourceGeometry) {
+            const geometry = sourceGeometry.clone();
+            geometry.computeVertexNormals();
+
+            const positionAttr = geometry.getAttribute("position");
+            const normalAttr = geometry.getAttribute("normal");
+            if (!positionAttr || !normalAttr) return geometry;
+
+            for (let i = 0; i < positionAttr.count; i++) {
+                const x = positionAttr.getX(i);
+                const y = positionAttr.getY(i);
+                const z = positionAttr.getZ(i);
+
+                const nx = normalAttr.getX(i);
+                const ny = normalAttr.getY(i);
+                const nz = normalAttr.getZ(i);
+
+                const fissureDamp = 1.0 - Math.exp(-((Math.abs(x) / 0.14) ** 2));
+                const poleDamp = 1.0 - (Math.min(1.0, Math.abs(z) / 1.05) * 0.45);
+
+                const ripple = (
+                    Math.sin((x * 18.0) + (y * 7.0))
+                    + (0.72 * Math.sin((y * 16.0) - (z * 9.0)))
+                    + (0.42 * Math.sin((z * 21.0) + (x * 5.0)))
+                ) * 0.0068 * fissureDamp * poleDamp;
+
+                positionAttr.setXYZ(
+                    i,
+                    x + (nx * ripple),
+                    y + (ny * ripple),
+                    z + (nz * ripple),
+                );
+            }
+
+            geometry.computeVertexNormals();
+            geometry.normalizeNormals();
+            geometry.computeBoundingSphere();
+            return geometry;
+        }
+
+        function buildBrainFromObj(objectRoot, options = {}) {
             const group = new THREE.Group();
             const candidates = [];
+            const skipEnhance = Boolean(options?.skipEnhance);
 
             objectRoot.updateMatrixWorld(true);
             objectRoot.traverse((child) => {
@@ -2229,15 +2395,23 @@
 
                 const geometry = child.geometry.clone();
                 geometry.applyMatrix4(child.matrixWorld);
-                const enhancedGeometry = enhanceSurfaceGeometry(geometry);
+                let finalGeometry;
+                if (skipEnhance) {
+                    let simplified = geometry.clone();
+                    simplified.deleteAttribute("normal");
+                    simplified = BufferGeometryUtils.mergeVertices(simplified, 1e-4);
+                    finalGeometry = addCorticalRelief(simplified);
+                } else {
+                    finalGeometry = enhanceSurfaceGeometry(geometry);
+                }
 
-                const positionAttr = enhancedGeometry.getAttribute("position");
+                const positionAttr = finalGeometry.getAttribute("position");
                 const vertexCount = positionAttr ? positionAttr.count : 0;
                 if (vertexCount <= 0) {
                     return;
                 }
 
-                candidates.push({ geometry: enhancedGeometry, vertexCount });
+                candidates.push({ geometry: finalGeometry, vertexCount });
             });
 
             if (candidates.length === 0) {
@@ -2290,12 +2464,66 @@
                 throw new Error("Missing scan ID for reconstruction mesh load");
             }
 
+            if (String(data.scan_id).startsWith("demo-scan")) {
+                try {
+                    return await buildReconstructedBrainFromStaticDemoCache(data.scan_id, meshQuality);
+                } catch (directCacheError) {
+                    console.warn("Direct demo cache load failed; falling back to mesh API:", directCacheError);
+                }
+            }
+
             const meshPayload = await fetchMeshForScan(data.scan_id, false, meshQuality);
             const loadedObj = await loadMeshGroup(meshPayload.mesh_url, meshPayload.mesh_format);
             return {
                 group: buildBrainFromObj(loadedObj),
                 payload: meshPayload,
             };
+        }
+
+        function getDirectDemoMeshCandidates(scanId, meshQuality = SURFACE_MESH_QUALITY) {
+            const quality = String(meshQuality || "standard").toLowerCase();
+            const qualityOrder = quality === "extreme"
+                ? ["extreme", "high", "standard"]
+                : quality === "high"
+                    ? ["high", "standard", "extreme"]
+                    : ["standard", "high", "extreme"];
+
+            const prefixByQuality = {
+                standard: "brain_v2",
+                high: "brain_hq_v2",
+                extreme: "brain_xq_v2",
+            };
+
+            const encodedScanId = encodeURIComponent(scanId);
+            return qualityOrder.map((q) => ({
+                quality: q,
+                mesh_url: `/outputs/demo_mesh/${encodedScanId}/${prefixByQuality[q]}_web.obj`,
+            }));
+        }
+
+        async function buildReconstructedBrainFromStaticDemoCache(scanId, meshQuality = SURFACE_MESH_QUALITY) {
+            let lastError = null;
+            const candidates = getDirectDemoMeshCandidates(scanId, meshQuality);
+            for (const candidate of candidates) {
+                try {
+                    const loadedObj = await loadObjGroup(candidate.mesh_url);
+                    return {
+                        group: buildBrainFromObj(loadedObj, { skipEnhance: true }),
+                        payload: {
+                            mesh_url: candidate.mesh_url,
+                            mesh_format: "obj",
+                            mesh_quality: candidate.quality,
+                            cached: true,
+                            synthetic_fallback: false,
+                            source_mode: "direct-static-cache",
+                        },
+                    };
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error("No direct demo mesh cache candidates were loadable");
         }
 
         function sampleSurfaceVolumeAtPoint(point, bounds) {
@@ -5006,7 +5234,8 @@
 
                 demoPatients = mergePatientsWithSamples(samplePatients, allPatients);
 
-                if (!selectedPatientId && demoPatients.length > 0) {
+                const hasSelectedPatient = demoPatients.some((patient) => patient.patient_id === selectedPatientId);
+                if ((!selectedPatientId || !hasSelectedPatient) && demoPatients.length > 0) {
                     selectedPatientId = demoPatients[0].patient_id;
                 }
 
@@ -5255,9 +5484,22 @@
         function mergePatientsWithSamples(samplePatients, allPatients) {
             const sample = Array.isArray(samplePatients) ? samplePatients : [];
             const all = Array.isArray(allPatients) ? allPatients : [];
+            const isClinicalWorklistPatient = (patient) => {
+                const patientId = String(patient?.patient_id || "").trim().toLowerCase();
+                const patientCode = String(patient?.patient_code || "").trim().toUpperCase();
+                const displayName = String(patient?.display_name || "").trim().toLowerCase();
+                const source = String(patient?.source || "").trim().toLowerCase();
+
+                if (patientId.startsWith("upload-")) return false;
+                if (patientCode.startsWith("UPLOAD-")) return false;
+                if (source === "recovered" && (displayName === "uploaded patient" || displayName === "recovered uploaded patient" || !displayName)) return false;
+                return true;
+            };
 
             const sampleIds = new Set(sample.map((patient) => patient.patient_id));
-            const extras = all.filter((patient) => patient?.patient_id && !sampleIds.has(patient.patient_id));
+            const extras = all.filter(
+                (patient) => patient?.patient_id && !sampleIds.has(patient.patient_id) && isClinicalWorklistPatient(patient)
+            );
             extras.sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
 
             const orderedSample = [...sample].sort((left, right) => (right.triage_score || 0) - (left.triage_score || 0));
@@ -5555,26 +5797,63 @@
                         : reconstruction.payload?.mesh_quality === "high"
                             ? "high-fidelity"
                             : "standard";
+                    if (reconstruction.payload?.source_mode === "direct-static-cache") {
+                        reconstructionFallbackReason = "Loaded cached patient mesh from outputs.";
+                    }
                 } catch (extremeError) {
-                    console.warn("Extreme-quality mesh load failed; retrying high-quality mesh:", extremeError);
-                    try {
-                        const reconstruction = await buildReconstructedBrain(data, "high");
-                        brainGroup = reconstruction.group;
-                        reconstructionMode = "mri-fmri";
-                        reconstructionQuality = "high-fidelity";
-                        reconstructionFallbackReason = "Extreme-detail mesh was unavailable, using high-detail patient mesh.";
-                    } catch (highError) {
-                        console.warn("High-quality mesh load failed; retrying standard mesh:", highError);
+                    const isDemoMeshUnavailable = String(extremeError?.message || "").includes("Demo mesh endpoint failed (404)");
+                    if (isDemoMeshUnavailable) {
+                        console.warn("Demo mesh endpoint unavailable; using procedural preview:", extremeError);
+                        reconstructionFallbackReason = "Demo mesh source is unavailable, displaying procedural preview.";
+                        brainGroup = buildDemoBrain(data);
+                        const clipSliderFallback = document.getElementById("clip-slider");
+                        if (clipSliderFallback) clipSliderFallback.value = "0";
+                        setViewerCameraPreset("reset");
+                    } else {
+                        console.warn("Extreme-quality mesh load failed; retrying high-quality mesh:", extremeError);
                         try {
-                            const reconstruction = await buildReconstructedBrain(data, "standard");
+                            const reconstruction = await buildReconstructedBrain(data, "high");
                             brainGroup = reconstruction.group;
                             reconstructionMode = "mri-fmri";
-                            reconstructionQuality = "standard";
-                            reconstructionFallbackReason = "High-detail mesh was unavailable, using standard patient mesh.";
-                        } catch (standardError) {
-                            console.warn("Patient mesh load failed; falling back to procedural preview:", standardError);
-                            reconstructionFallbackReason = "Patient mesh generation failed, displaying procedural preview.";
-                            brainGroup = buildDemoBrain(data);
+                            reconstructionQuality = "high-fidelity";
+                            reconstructionFallbackReason = "Extreme-detail mesh was unavailable, using high-detail patient mesh.";
+                        } catch (highError) {
+                            console.warn("High-quality mesh load failed; retrying standard mesh:", highError);
+                            try {
+                                const reconstruction = await buildReconstructedBrain(data, "standard");
+                                brainGroup = reconstruction.group;
+                                reconstructionMode = "mri-fmri";
+                                reconstructionQuality = "standard";
+                                reconstructionFallbackReason = "High-detail mesh was unavailable, using standard patient mesh.";
+                            } catch (standardError) {
+                                console.warn("Patient mesh load failed; attempting direct static cache fallback:", standardError);
+                                const isDemoScan = String(data?.scan_id || "").startsWith("demo-scan");
+                                if (isDemoScan) {
+                                    try {
+                                        const reconstruction = await buildReconstructedBrainFromStaticDemoCache(data.scan_id, "standard");
+                                        brainGroup = reconstruction.group;
+                                        reconstructionMode = "mri-fmri";
+                                        reconstructionQuality = reconstruction.payload?.mesh_quality || "standard";
+                                        reconstructionFallbackReason = "Mesh API unavailable; loaded cached patient mesh from outputs.";
+                                        const clipSliderFallback = document.getElementById("clip-slider");
+                                        if (clipSliderFallback) clipSliderFallback.value = "0";
+                                        setViewerCameraPreset("reset");
+                                    } catch (cacheFallbackError) {
+                                        console.warn("Static cache fallback failed; using procedural preview:", cacheFallbackError);
+                                        reconstructionFallbackReason = "Patient mesh generation failed, displaying procedural preview.";
+                                        brainGroup = buildDemoBrain(data);
+                                        const clipSliderFallback = document.getElementById("clip-slider");
+                                        if (clipSliderFallback) clipSliderFallback.value = "0";
+                                        setViewerCameraPreset("reset");
+                                    }
+                                } else {
+                                    reconstructionFallbackReason = "Patient mesh generation failed, displaying procedural preview.";
+                                    brainGroup = buildDemoBrain(data);
+                                    const clipSliderFallback = document.getElementById("clip-slider");
+                                    if (clipSliderFallback) clipSliderFallback.value = "0";
+                                    setViewerCameraPreset("reset");
+                                }
+                            }
                         }
                     }
                 }
@@ -5594,7 +5873,12 @@
 
                 const clipSlider = document.getElementById("clip-slider");
                 applyClipDepthFromSlider(clipSlider ? clipSlider.value : 0);
-                setRenderMode(volumeLoaded ? activeRenderMode : "surface");
+                const sourceModality = String((data?.modalities && data.modalities[0]) || "").toUpperCase();
+                const preferSurfaceFirst = sourceModality === "FMRI";
+                const initialRenderMode = volumeLoaded
+                    ? (preferSurfaceFirst ? "surface" : activeRenderMode)
+                    : "surface";
+                setRenderMode(initialRenderMode);
                 updateViewerPickInfo("Click any cortical area in the 3D view to inspect the nearest affected region.");
                 latestReportPayload = null;
                 renderDetailedReportPanel(null);
@@ -5622,8 +5906,10 @@
 
                 const volumeStatus = volumeLoaded
                     ? (volumeUsesSyntheticFallback
-                        ? "Volumetric view active (synthetic fallback due to non-volumetric upload source)."
-                        : "Volumetric view active with tri-planar (axial/coronal/sagittal) combined reconstruction and optional damage overlay.")
+                        ? "Volumetric view available (synthetic fallback volume)."
+                        : (initialRenderMode === "surface"
+                            ? "Volumetric data loaded; starting in Surface mode for clearer cortical morphology."
+                            : "Volumetric view active with tri-planar (axial/coronal/sagittal) combined reconstruction and optional damage overlay."))
                     : "Volumetric shader unavailable, using surface-only mode.";
 
                 if (reconstructionMode === "mri-fmri") {

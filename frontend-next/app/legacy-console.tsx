@@ -9,7 +9,7 @@ type LegacyConsoleProps = {
 
 function loadLegacyFile(relativePath: string): string {
   const absolute = path.join(process.cwd(), "public", "legacy", relativePath);
-  return fs.readFileSync(absolute, "utf8");
+  return fs.readFileSync(absolute, "utf8").replace(/^\uFEFF/, "");
 }
 
 export default function LegacyConsole({
