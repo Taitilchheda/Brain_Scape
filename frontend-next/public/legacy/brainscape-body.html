@@ -3,14 +3,15 @@
             <div class="brand">
                 <div class="brand-mark" aria-hidden="true"></div>
                 <div>
-                    <div class="brand-title">Brain_Scape Clinical Console</div>
-                    <p class="brand-subtitle">White-theme neuroradiology workspace with live AI analysis.</p>
+                    <div class="brand-title">Brain Scape Clinical Console</div>
+                    <p class="brand-subtitle">Advanced neuroradiology workspace with live AI analysis.</p>
                 </div>
             </div>
 
             <div class="topbar-actions">
                 <nav class="nav-links" aria-label="Primary navigation">
                     <button id="nav-viewer" class="nav-link active" type="button">3D Viewer</button>
+                    <button id="nav-fullscreen-viewer" class="nav-link" type="button">Precision View</button>
                     <button id="nav-report" class="nav-link" type="button">Reports</button>
                 </nav>
 
@@ -35,84 +36,88 @@
                         <p>Inspect anatomical involvement, confidence scores, and differential cues in a clinician-ready panel.</p>
                     </div>
                     <div class="viewer-badges">
-                        <span class="badge">Clinical Session</span>
-                        <span class="badge">Glassmorphism UI</span>
+                        <button class="badge-action" id="btn-toggle-controls" type="button" aria-pressed="false">Compact Layout</button>
+                        <button class="badge-action" id="btn-inline-fullscreen" type="button">Fullscreen 3D</button>
                         <span class="badge" id="active-patient-badge">No sample selected</span>
                     </div>
                 </div>
 
-                <div class="workflow-strip" aria-label="Clinical workflow progress">
-                    <div class="workflow-step" id="workflow-step-auth">
-                        <span class="workflow-index">1</span>
-                        <span>Sign In</span>
+                <div class="viewer-controls-stack" id="viewer-controls-stack">
+                    <div class="workflow-strip" aria-label="Clinical workflow progress">
+                        <div class="workflow-step" id="workflow-step-auth">
+                            <span class="workflow-index">1</span>
+                            <span>Sign In</span>
+                        </div>
+                        <div class="workflow-step" id="workflow-step-load">
+                            <span class="workflow-index">2</span>
+                            <span>Select Case</span>
+                        </div>
+                        <div class="workflow-step" id="workflow-step-analyze">
+                            <span class="workflow-index">3</span>
+                            <span>Analyze Scan</span>
+                        </div>
+                        <div class="workflow-step" id="workflow-step-verify">
+                            <span class="workflow-index">4</span>
+                            <span>Verify Findings</span>
+                        </div>
+                        <div class="workflow-step" id="workflow-step-report">
+                            <span class="workflow-index">5</span>
+                            <span>Finalize Report</span>
+                        </div>
                     </div>
-                    <div class="workflow-step" id="workflow-step-load">
-                        <span class="workflow-index">2</span>
-                        <span>Select Case</span>
+
+                    <div class="viewer-toolbar">
+                        <div class="viewer-toolbar-actions">
+                            <button class="viewer-tool-btn" id="btn-view-reset" type="button">Reset View</button>
+                            <button class="viewer-tool-btn" id="btn-view-left" type="button">Left</button>
+                            <button class="viewer-tool-btn" id="btn-view-right" type="button">Right</button>
+                            <button class="viewer-tool-btn" id="btn-view-top" type="button">Top</button>
+                            <button class="viewer-tool-btn" id="btn-view-front" type="button">Front</button>
+                            <button class="viewer-tool-btn active" id="btn-projection-perspective" type="button">Perspective</button>
+                            <button class="viewer-tool-btn" id="btn-projection-orthographic" type="button">Orthographic</button>
+                            <button class="viewer-tool-btn active" id="btn-toggle-grid" type="button">Grid On</button>
+                            <button class="viewer-tool-btn active" id="btn-toggle-axes" type="button">Axes On</button>
+                            <button class="viewer-tool-btn" id="btn-auto-rotate" type="button">Auto Rotate Off</button>
+                            <button class="viewer-tool-btn active" id="btn-render-hybrid" type="button">Hybrid</button>
+                            <button class="viewer-tool-btn" id="btn-render-volume" type="button">Volume</button>
+                            <button class="viewer-tool-btn" id="btn-render-surface" type="button">Surface</button>
+                            <button class="viewer-tool-btn" id="btn-3d-measure" type="button">Measure Distance</button>
+                            <button class="viewer-tool-btn" id="btn-3d-measure-angle" type="button">Measure Angle</button>
+                            <button class="viewer-tool-btn" id="btn-3d-clear-measure" type="button">Clear Measure</button>
+                            <button class="viewer-tool-btn" id="btn-3d-bookmark" type="button">Lesion Bookmark</button>
+                            <button class="viewer-tool-btn" id="btn-3d-clear-bookmarks" type="button">Clear Bookmarks</button>
+                        </div>
+                        <label class="clip-control" for="clip-slider">
+                            Depth Clip
+                            <input id="clip-slider" type="range" min="0" max="100" value="0">
+                        </label>
                     </div>
-                    <div class="workflow-step" id="workflow-step-analyze">
-                        <span class="workflow-index">3</span>
-                        <span>Analyze Scan</span>
-                    </div>
-                    <div class="workflow-step" id="workflow-step-verify">
-                        <span class="workflow-index">4</span>
-                        <span>Verify Findings</span>
-                    </div>
-                    <div class="workflow-step" id="workflow-step-report">
-                        <span class="workflow-index">5</span>
-                        <span>Finalize Report</span>
+
+                    <div class="viewer-kpis" aria-label="Clinical key metrics">
+                        <div class="kpi-card">
+                            <span class="kpi-label">Patient</span>
+                            <strong class="kpi-value" id="kpi-patient">No patient selected</strong>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">Modality</span>
+                            <strong class="kpi-value" id="kpi-modality">-</strong>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">Risk Band</span>
+                            <strong class="kpi-value low" id="kpi-risk">-</strong>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">Flagged Regions</span>
+                            <strong class="kpi-value" id="kpi-regions">0</strong>
+                        </div>
+                        <div class="kpi-card">
+                            <span class="kpi-label">Confidence</span>
+                            <strong class="kpi-value" id="kpi-confidence">-</strong>
+                        </div>
                     </div>
                 </div>
 
-                <div class="viewer-toolbar">
-                    <div class="viewer-toolbar-actions">
-                        <button class="viewer-tool-btn" id="btn-view-reset" type="button">Reset View</button>
-                        <button class="viewer-tool-btn" id="btn-view-left" type="button">Left</button>
-                        <button class="viewer-tool-btn" id="btn-view-right" type="button">Right</button>
-                        <button class="viewer-tool-btn" id="btn-view-top" type="button">Top</button>
-                        <button class="viewer-tool-btn" id="btn-view-front" type="button">Front</button>
-                        <button class="viewer-tool-btn active" id="btn-projection-perspective" type="button">Perspective</button>
-                        <button class="viewer-tool-btn" id="btn-projection-orthographic" type="button">Orthographic</button>
-                        <button class="viewer-tool-btn active" id="btn-toggle-grid" type="button">Grid On</button>
-                        <button class="viewer-tool-btn active" id="btn-toggle-axes" type="button">Axes On</button>
-                        <button class="viewer-tool-btn" id="btn-auto-rotate" type="button">Auto Rotate Off</button>
-                        <button class="viewer-tool-btn active" id="btn-render-hybrid" type="button">Hybrid</button>
-                        <button class="viewer-tool-btn" id="btn-render-volume" type="button">Volume</button>
-                        <button class="viewer-tool-btn" id="btn-render-surface" type="button">Surface</button>
-                        <button class="viewer-tool-btn" id="btn-3d-measure" type="button">Measure Distance</button>
-                        <button class="viewer-tool-btn" id="btn-3d-measure-angle" type="button">Measure Angle</button>
-                        <button class="viewer-tool-btn" id="btn-3d-clear-measure" type="button">Clear Measure</button>
-                        <button class="viewer-tool-btn" id="btn-3d-bookmark" type="button">Lesion Bookmark</button>
-                        <button class="viewer-tool-btn" id="btn-3d-clear-bookmarks" type="button">Clear Bookmarks</button>
-                    </div>
-                    <label class="clip-control" for="clip-slider">
-                        Depth Clip
-                        <input id="clip-slider" type="range" min="0" max="100" value="0">
-                    </label>
-                </div>
-
-                <div class="viewer-kpis" aria-label="Clinical key metrics">
-                    <div class="kpi-card">
-                        <span class="kpi-label">Patient</span>
-                        <strong class="kpi-value" id="kpi-patient">No patient selected</strong>
-                    </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">Modality</span>
-                        <strong class="kpi-value" id="kpi-modality">-</strong>
-                    </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">Risk Band</span>
-                        <strong class="kpi-value low" id="kpi-risk">-</strong>
-                    </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">Flagged Regions</span>
-                        <strong class="kpi-value" id="kpi-regions">0</strong>
-                    </div>
-                    <div class="kpi-card">
-                        <span class="kpi-label">Confidence</span>
-                        <strong class="kpi-value" id="kpi-confidence">-</strong>
-                    </div>
-                </div>
+                <div class="viewer-resizer-h" id="viewer-resizer-h" role="separator" aria-label="Resize viewer controls" aria-orientation="horizontal" tabindex="0"></div>
 
                 <div class="viewer-surface">
                     <canvas id="brain-canvas" aria-label="3D brain viewer"></canvas>
@@ -161,7 +166,7 @@
                         </div>
                     </div>
 
-                    <div class="viewer-insights" id="viewer-insights" aria-live="polite">
+                    <div class="viewer-insights is-hidden" id="viewer-insights" aria-live="polite" aria-hidden="true">
                         <div class="viewer-insights-head">
                             <span>Key Insights</span>
                             <span id="viewer-insights-risk" class="risk-chip low">n/a</span>
@@ -176,6 +181,8 @@
                     </div>
                 </div>
             </section>
+
+            <div class="workspace-resizer" id="workspace-resizer" role="separator" aria-label="Resize patient panel" aria-orientation="vertical" tabindex="0"></div>
 
             <aside class="side-panel">
                 <div class="panel-mode-switch glass" role="tablist" aria-label="Panel focus mode">
@@ -564,15 +571,6 @@
         <footer class="status-bar glass">
             <div class="status-main">
                 <span id="status-text">Ready. Authenticate and load a scan to begin analysis.</span>
-                <div id="loader-panel" class="loader-panel">
-                    <div class="loader-meta">
-                        <span id="loader-stage">Waiting</span>
-                        <span id="loader-eta">ETA --</span>
-                    </div>
-                    <div class="loader-track">
-                        <div id="loader-progress" class="loader-progress"></div>
-                    </div>
-                </div>
             </div>
             <span id="job-info">No active job</span>
         </footer>

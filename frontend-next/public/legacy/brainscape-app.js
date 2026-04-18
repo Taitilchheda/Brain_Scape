@@ -10,6 +10,11 @@
         const DICOM_VOLUME_RESOLUTION = "extreme";
         const DICOM_TARGET_RENDER_EDGE = 1024;
         const DICOM_MAX_RENDER_EDGE = 1280;
+        const CURRENT_ROUTE_PATH = String(window.location?.pathname || "").toLowerCase();
+        const IS_FULLSCREEN_VIEWER_ROUTE = CURRENT_ROUTE_PATH.startsWith("/viewer/fullscreen");
+        const CURRENT_ROUTE_QUERY = new URLSearchParams(window.location?.search || "");
+        const ROUTE_SCAN_ID = String(CURRENT_ROUTE_QUERY.get("scan_id") || "").trim();
+        const ROUTE_PATIENT_ID = String(CURRENT_ROUTE_QUERY.get("patient_id") || "").trim();
         let authToken = localStorage.getItem("brainscape_token") || "";
         let currentScanId = null;
         let analysisData = null;
@@ -57,6 +62,14 @@
         let renderer;
         let controls;
         let activeProjectionMode = "perspective";
+        const VIEWER_WORLD_UP = new THREE.Vector3(0, 0, 1);
+        const VIEWER_CAMERA_PRESETS = {
+            reset: [0, -3.0, 0.45],
+            left: [-3.0, -0.2, 0.45],
+            right: [3.0, -0.2, 0.45],
+            top: [0, -0.55, 2.95],
+            front: [0, -3.0, 0.45],
+        };
         let viewerReferenceGrid = null;
         let viewerReferenceAxes = null;
         let viewerReferenceCage = null;
@@ -103,6 +116,11 @@
             frameWidth: 1,
             frameHeight: 1,
         };
+
+        const PANEL_WIDTH_STORAGE_KEY = "brainscape_layout_panel_width";
+        const CONTROLS_HEIGHT_STORAGE_KEY = "brainscape_layout_controls_height";
+        const CONTROLS_COLLAPSED_STORAGE_KEY = "brainscape_layout_controls_collapsed";
+        let viewerResizeRafToken = null;
 
         const DICOM_CONTEXT_PRESETS = {
             auto: { preset: "brain", ww: 90, wc: 42 },
@@ -301,6 +319,18 @@
 
         function clampValue(value, min, max) {
             return Math.max(min, Math.min(max, value));
+        }
+
+        function buildPrecisionViewerUrl() {
+            const query = new URLSearchParams();
+            if (currentScanId) {
+                query.set("scan_id", String(currentScanId));
+            } else if (selectedPatientId) {
+                query.set("patient_id", String(selectedPatientId));
+            }
+
+            const suffix = query.toString();
+            return suffix ? `/viewer/fullscreen?${suffix}` : "/viewer/fullscreen";
         }
 
         function getVolumeIndex(volume, x, y, z) {
@@ -515,6 +545,177 @@
             orthographicCamera.updateProjectionMatrix();
         }
 
+        function queueViewerSurfaceResize() {
+            if (viewerResizeRafToken !== null) return;
+
+            viewerResizeRafToken = requestAnimationFrame(() => {
+                viewerResizeRafToken = null;
+
+                const canvas = document.getElementById("brain-canvas");
+                const container = canvas?.parentElement;
+                if (!container || !perspectiveCamera || !renderer) return;
+
+                const width = Math.max(1, Number(container.clientWidth) || 1);
+                const height = Math.max(1, Number(container.clientHeight) || 1);
+
+                perspectiveCamera.aspect = width / height;
+                perspectiveCamera.updateProjectionMatrix();
+                updateOrthographicFrustum(width, height);
+                renderer.setSize(width, height, false);
+                renderDicomSlice();
+            });
+        }
+
+        function initDynamicWorkspaceLayout() {
+            const workspace = document.querySelector(".workspace");
+            const sidePanel = document.querySelector(".side-panel");
+            const workspaceResizer = document.getElementById("workspace-resizer");
+            const viewerStage = document.querySelector(".viewer-stage");
+            const controlsStack = document.getElementById("viewer-controls-stack");
+            const viewerResizer = document.getElementById("viewer-resizer-h");
+            const controlsToggleButton = document.getElementById("btn-toggle-controls");
+
+            if (!workspace || !viewerStage || !controlsStack) return;
+
+            const isDesktopLayout = () => window.matchMedia("(min-width: 1181px)").matches;
+
+            const applyPanelWidth = (rawWidth, persist = true) => {
+                if (!sidePanel || !isDesktopLayout() || IS_FULLSCREEN_VIEWER_ROUTE) return;
+                const rect = workspace.getBoundingClientRect();
+                const minWidth = 320;
+                const maxWidth = Math.max(minWidth + 60, Math.min(rect.width * 0.56, rect.width - 320));
+                const nextWidth = clampValue(rawWidth, minWidth, maxWidth);
+                workspace.style.setProperty("--panel-width", `${Math.round(nextWidth)}px`);
+                if (persist) {
+                    localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(Math.round(nextWidth)));
+                }
+                queueViewerSurfaceResize();
+            };
+
+            const applyControlsHeight = (rawHeight, persist = true) => {
+                if (!isDesktopLayout()) return;
+                const stageRect = viewerStage.getBoundingClientRect();
+                const minHeight = 86;
+                const maxHeight = Math.max(minHeight + 40, Math.min(stageRect.height * 0.52, stageRect.height - 220));
+                const nextHeight = clampValue(rawHeight, minHeight, maxHeight);
+                viewerStage.style.setProperty("--viewer-controls-height", `${Math.round(nextHeight)}px`);
+                if (persist) {
+                    localStorage.setItem(CONTROLS_HEIGHT_STORAGE_KEY, String(Math.round(nextHeight)));
+                }
+                queueViewerSurfaceResize();
+            };
+
+            const setControlsCollapsed = (collapsed, persist = true) => {
+                viewerStage.classList.toggle("is-controls-collapsed", collapsed);
+                if (controlsToggleButton) {
+                    controlsToggleButton.classList.toggle("active", collapsed);
+                    controlsToggleButton.setAttribute("aria-pressed", collapsed ? "true" : "false");
+                    controlsToggleButton.textContent = collapsed ? "Expand Layout" : "Compact Layout";
+                }
+                if (persist) {
+                    localStorage.setItem(CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? "1" : "0");
+                }
+                queueViewerSurfaceResize();
+            };
+
+            const syncFromStorage = () => {
+                const storedCollapsed = localStorage.getItem(CONTROLS_COLLAPSED_STORAGE_KEY) === "1";
+                setControlsCollapsed(storedCollapsed, false);
+
+                if (!isDesktopLayout()) {
+                    workspace.style.removeProperty("--panel-width");
+                    viewerStage.style.removeProperty("--viewer-controls-height");
+                    return;
+                }
+
+                const storedControlsHeight = Number(localStorage.getItem(CONTROLS_HEIGHT_STORAGE_KEY) || 0);
+                const baselineControlsHeight = controlsStack.getBoundingClientRect().height;
+                applyControlsHeight(storedControlsHeight > 0 ? storedControlsHeight : baselineControlsHeight, false);
+
+                if (IS_FULLSCREEN_VIEWER_ROUTE || !sidePanel) {
+                    workspace.style.removeProperty("--panel-width");
+                    return;
+                }
+
+                const storedPanelWidth = Number(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY) || 0);
+                const baselinePanelWidth = sidePanel.getBoundingClientRect().width || 420;
+                applyPanelWidth(storedPanelWidth > 0 ? storedPanelWidth : baselinePanelWidth, false);
+            };
+
+            if (controlsToggleButton) {
+                controlsToggleButton.addEventListener("click", () => {
+                    const nextCollapsed = !viewerStage.classList.contains("is-controls-collapsed");
+                    setControlsCollapsed(nextCollapsed, true);
+                });
+            }
+
+            if (workspaceResizer && sidePanel && !IS_FULLSCREEN_VIEWER_ROUTE) {
+                workspaceResizer.addEventListener("pointerdown", (event) => {
+                    if (!isDesktopLayout()) return;
+                    event.preventDefault();
+                    workspaceResizer.setPointerCapture(event.pointerId);
+                    workspace.classList.add("is-resizing");
+                    document.body.classList.add("is-dragging-layout");
+
+                    const handleMove = (moveEvent) => {
+                        const rect = workspace.getBoundingClientRect();
+                        const targetWidth = rect.right - moveEvent.clientX;
+                        applyPanelWidth(targetWidth, true);
+                    };
+
+                    const handleStop = () => {
+                        workspace.classList.remove("is-resizing");
+                        document.body.classList.remove("is-dragging-layout");
+                        workspaceResizer.removeEventListener("pointermove", handleMove);
+                        workspaceResizer.removeEventListener("pointerup", handleStop);
+                        workspaceResizer.removeEventListener("pointercancel", handleStop);
+                        queueViewerSurfaceResize();
+                    };
+
+                    workspaceResizer.addEventListener("pointermove", handleMove);
+                    workspaceResizer.addEventListener("pointerup", handleStop);
+                    workspaceResizer.addEventListener("pointercancel", handleStop);
+                });
+            }
+
+            if (viewerResizer) {
+                viewerResizer.addEventListener("pointerdown", (event) => {
+                    if (!isDesktopLayout()) return;
+                    event.preventDefault();
+                    viewerResizer.setPointerCapture(event.pointerId);
+                    viewerStage.classList.add("is-resizing-controls");
+                    document.body.classList.add("is-dragging-controls");
+
+                    const startY = event.clientY;
+                    const startHeight = controlsStack.getBoundingClientRect().height;
+
+                    const handleMove = (moveEvent) => {
+                        const nextHeight = startHeight + (moveEvent.clientY - startY);
+                        applyControlsHeight(nextHeight, true);
+                    };
+
+                    const handleStop = () => {
+                        viewerStage.classList.remove("is-resizing-controls");
+                        document.body.classList.remove("is-dragging-controls");
+                        viewerResizer.removeEventListener("pointermove", handleMove);
+                        viewerResizer.removeEventListener("pointerup", handleStop);
+                        viewerResizer.removeEventListener("pointercancel", handleStop);
+                        queueViewerSurfaceResize();
+                    };
+
+                    viewerResizer.addEventListener("pointermove", handleMove);
+                    viewerResizer.addEventListener("pointerup", handleStop);
+                    viewerResizer.addEventListener("pointercancel", handleStop);
+                });
+            }
+
+            syncFromStorage();
+            window.addEventListener("resize", () => {
+                syncFromStorage();
+                queueViewerSurfaceResize();
+            });
+        }
+
         function syncViewerReferenceToggles() {
             const gridButton = document.getElementById("btn-toggle-grid");
             const axesButton = document.getElementById("btn-toggle-axes");
@@ -591,7 +792,8 @@
             if (viewerReferenceAxes) scene.remove(viewerReferenceAxes);
 
             viewerReferenceGrid = new THREE.GridHelper(2.8, 28, 0x3f79bc, 0x97bce3);
-            viewerReferenceGrid.position.y = -1.05;
+            viewerReferenceGrid.rotation.x = Math.PI / 2;
+            viewerReferenceGrid.position.z = -1.05;
             if (Array.isArray(viewerReferenceGrid.material)) {
                 viewerReferenceGrid.material.forEach((material) => {
                     material.transparent = true;
@@ -631,6 +833,7 @@
             if (!source || !target) return;
             target.position.copy(source.position);
             target.quaternion.copy(source.quaternion);
+            target.up.copy(source.up);
             target.zoom = source.zoom || 1;
             target.updateProjectionMatrix();
         }
@@ -677,8 +880,10 @@
 
             const container = canvas.parentElement;
             perspectiveCamera = new THREE.PerspectiveCamera(44, container.clientWidth / container.clientHeight, 0.01, 100);
-            perspectiveCamera.position.set(0, 0, 3);
+            perspectiveCamera.position.set(0, -3.0, 0.45);
+            perspectiveCamera.up.copy(VIEWER_WORLD_UP);
             orthographicCamera = new THREE.OrthographicCamera(-2.4, 2.4, 2.4, -2.4, 0.01, 100);
+            orthographicCamera.up.copy(VIEWER_WORLD_UP);
             updateOrthographicFrustum(container.clientWidth, container.clientHeight);
             orthographicCamera.position.copy(perspectiveCamera.position);
             camera = perspectiveCamera;
@@ -717,14 +922,7 @@
 
             canvas.addEventListener("click", handleBrainCanvasClick);
 
-            window.addEventListener("resize", () => {
-                const c = canvas.parentElement;
-                perspectiveCamera.aspect = c.clientWidth / c.clientHeight;
-                perspectiveCamera.updateProjectionMatrix();
-                updateOrthographicFrustum(c.clientWidth, c.clientHeight);
-                renderer.setSize(c.clientWidth, c.clientHeight);
-                renderDicomSlice();
-            });
+            window.addEventListener("resize", queueViewerSurfaceResize);
 
             animate();
         }
@@ -737,14 +935,8 @@
 
         function setViewerCameraPreset(mode) {
             if (!camera || !controls) return;
-            const presets = {
-                reset: [0, 0, 3],
-                left: [-3, 0, 0],
-                right: [3, 0, 0],
-                top: [0, 3, 0],
-                front: [0, 0, 3],
-            };
-            const target = presets[mode] || presets.reset;
+            const target = VIEWER_CAMERA_PRESETS[mode] || VIEWER_CAMERA_PRESETS.reset;
+            camera.up.copy(VIEWER_WORLD_UP);
             camera.position.set(target[0], target[1], target[2]);
             controls.target.set(0, 0, 0);
             controls.update();
@@ -780,11 +972,34 @@
         }
 
         function renderViewerInsights(data = analysisData, patientOverride = null) {
+            const panel = document.getElementById("viewer-insights");
             const riskChip = document.getElementById("viewer-insights-risk");
             const list = document.getElementById("viewer-insights-list");
-            if (!riskChip || !list) return;
+            if (!panel || !riskChip || !list) return;
 
             const patient = patientOverride || findPatientById(data?.patient_id) || getSelectedPatient();
+            const hasLoadedPatientData = Boolean(
+                data && (
+                    data.scan_id ||
+                    data.patient_id ||
+                    data.executive_summary ||
+                    data.overall_confidence !== undefined ||
+                    (Array.isArray(data.damage_summary) && data.damage_summary.length > 0)
+                )
+            );
+
+            if (!hasLoadedPatientData) {
+                panel.classList.add("is-hidden");
+                panel.setAttribute("aria-hidden", "true");
+                riskChip.className = "risk-chip low";
+                riskChip.textContent = "n/a";
+                list.innerHTML = "<div class='insight-item muted'>Load a scan to view top neurological findings and confidence context.</div>";
+                return;
+            }
+
+            panel.classList.remove("is-hidden");
+            panel.setAttribute("aria-hidden", "false");
+
             const regions = normalizeRegions(data);
             const severeCount = regions.filter((region) => Number(region?.severity_level || 0) >= 4).length;
             const moderateCount = regions.filter((region) => Number(region?.severity_level || 0) === 3).length;
@@ -794,13 +1009,6 @@
             const confidencePct = Number.isFinite(Number(confidenceValue))
                 ? Math.round(Number(confidenceValue) * 100)
                 : null;
-
-            if (!patient && !data) {
-                riskChip.className = "risk-chip low";
-                riskChip.textContent = "n/a";
-                list.innerHTML = "<div class='insight-item muted'>Load a scan to view top neurological findings and confidence context.</div>";
-                return;
-            }
 
             const riskClass = getRiskClass(data?.risk_band || patient?.risk_band || "low");
             riskChip.className = `risk-chip ${riskClass}`;
@@ -2057,6 +2265,23 @@
                 group.add(mesh);
             });
 
+            // Normalize imported meshes into a stable view volume so camera presets remain valid.
+            const bounds = new THREE.Box3().setFromObject(group);
+            if (!bounds.isEmpty()) {
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                bounds.getCenter(center);
+                bounds.getSize(size);
+
+                const maxDim = Math.max(size.x, size.y, size.z, 1e-6);
+                const targetSpan = 2.04;
+                const uniformScale = targetSpan / maxDim;
+
+                group.position.sub(center);
+                group.scale.setScalar(uniformScale);
+                group.updateMatrixWorld(true);
+            }
+
             return group;
         }
 
@@ -2198,6 +2423,16 @@
             return `ETA ${mins}m ${secs}s`;
         }
 
+        function formatLoaderStage(stage) {
+            const normalized = String(stage || "waiting")
+                .trim()
+                .replace(/[_-]+/g, " ")
+                .replace(/\s+/g, " ")
+                .toLowerCase();
+            if (!normalized) return "Waiting";
+            return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+        }
+
         function setRenderLoaderState({
             active = false,
             title = "Preparing 3D renderer",
@@ -2222,13 +2457,35 @@
             const bar = document.getElementById("loader-progress");
             const stageEl = document.getElementById("loader-stage");
             const etaEl = document.getElementById("loader-eta");
-            if (!panel || !bar || !stageEl || !etaEl) return;
-
-            panel.classList.toggle("active", Boolean(active));
             const pct = Math.max(0, Math.min(100, Number(progress) || 0));
+            const stageLabel = formatLoaderStage(stage);
+            const etaText = Number.isFinite(Number(etaSeconds)) ? formatEta(etaSeconds) : "ETA --";
+
+            if (active) {
+                const title = stageLabel === "Complete" ? "3D mapping ready" : `Pipeline stage: ${stageLabel}`;
+                const detail = stageLabel === "Complete"
+                    ? "Finalizing visualization layers for clinical review."
+                    : `${stageLabel} in progress. ${etaText}`;
+                setRenderLoaderState({
+                    active: true,
+                    progress: pct,
+                    title,
+                    detail,
+                });
+            } else {
+                setRenderLoaderState({
+                    active: false,
+                    progress: 0,
+                    title: "Preparing 3D renderer",
+                    detail: "Initializing anatomical mapping pipeline...",
+                });
+            }
+
+            if (!panel || !bar || !stageEl || !etaEl) return;
+            panel.classList.toggle("active", Boolean(active));
             bar.style.width = `${pct}%`;
-            stageEl.textContent = `Stage: ${String(stage || "waiting")}`;
-            etaEl.textContent = Number.isFinite(Number(etaSeconds)) ? formatEta(etaSeconds) : "ETA --";
+            stageEl.textContent = `Stage: ${stageLabel}`;
+            etaEl.textContent = etaText;
         }
 
         function updateJobInfo(text) {
@@ -4760,6 +5017,20 @@
                 updateActivePatientBadge(getSelectedPatient(), false);
                 updateClinicalKpis(null, getSelectedPatient());
                 updateClinicalWorkflow();
+
+                if (IS_FULLSCREEN_VIEWER_ROUTE && !currentScanId && !ROUTE_SCAN_ID) {
+                    const preferredPatient = ROUTE_PATIENT_ID && findPatientById(ROUTE_PATIENT_ID)
+                        ? ROUTE_PATIENT_ID
+                        : selectedPatientId;
+                    if (preferredPatient && preferredPatient !== selectedPatientId) {
+                        setSelectedPatient(preferredPatient);
+                    }
+                    const autoPatientId = preferredPatient || selectedPatientId;
+                    const autoScanId = ROUTE_SCAN_ID || "";
+                    if (autoPatientId || autoScanId) {
+                        loadDemo(autoPatientId, autoScanId);
+                    }
+                }
             } catch (error) {
                 if (list) {
                     list.innerHTML = "<div class='region-item muted'>Sample patients unavailable.</div>";
@@ -5175,32 +5446,59 @@
             }
 
             const resolvedPatientId = patientId || selectedPatientId || "";
+            const resolvedScanId = String(scanId || "").trim();
+            if (resolvedPatientId) {
+                setSelectedPatient(resolvedPatientId);
+            }
             const queryParams = new URLSearchParams();
-            if (scanId) {
-                queryParams.set("scan_id", scanId);
+            if (resolvedScanId) {
+                queryParams.set("scan_id", resolvedScanId);
             } else if (resolvedPatientId) {
                 queryParams.set("patient_id", resolvedPatientId);
             }
             const patientQuery = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-            updateStatus("Loading selected demo scan...");
-            updateJobInfo(scanId || resolvedPatientId || "demo");
+            updateStatus(resolvedScanId ? `Loading scan ${resolvedScanId}...` : "Loading selected demo scan...");
+            updateJobInfo(resolvedScanId || resolvedPatientId || "demo");
             setLoaderState({ active: false, progress: 0, stage: "idle", etaSeconds: null });
 
             try {
-                const ingestResp = await fetchWithAuthRetry(`${API_BASE}/demo/ingest${patientQuery}`, {
-                    method: "POST",
-                }, "clinician");
-                if (!ingestResp.ok) {
-                    throw new Error(`Demo ingest failed (${ingestResp.status})`);
+                let loadedFromDirectScan = false;
+                if (resolvedScanId) {
+                    try {
+                        const analysisResp = await fetchWithAuthRetry(
+                            `${API_BASE}/analysis/${encodeURIComponent(resolvedScanId)}`,
+                            {},
+                            "clinician"
+                        );
+                        if (!analysisResp.ok) {
+                            throw new Error(`Analysis load failed (${analysisResp.status})`);
+                        }
+                        analysisData = await analysisResp.json();
+                        loadedFromDirectScan = true;
+                    } catch (scanLookupError) {
+                        if (!resolvedPatientId) {
+                            throw scanLookupError;
+                        }
+                        updateStatus(`Scan ${resolvedScanId} is unavailable. Loading the selected patient demo instead...`);
+                    }
                 }
 
-                const resp = await fetchWithAuthRetry(`${API_BASE}/demo/analysis${patientQuery}`, {}, "clinician");
-                if (!resp.ok) {
-                    throw new Error(`Demo analysis failed (${resp.status})`);
+                if (!loadedFromDirectScan) {
+                    const ingestResp = await fetchWithAuthRetry(`${API_BASE}/demo/ingest${patientQuery}`, {
+                        method: "POST",
+                    }, "clinician");
+                    if (!ingestResp.ok) {
+                        throw new Error(`Demo ingest failed (${ingestResp.status})`);
+                    }
+
+                    const resp = await fetchWithAuthRetry(`${API_BASE}/demo/analysis${patientQuery}`, {}, "clinician");
+                    if (!resp.ok) {
+                        throw new Error(`Demo analysis failed (${resp.status})`);
+                    }
+                    analysisData = await resp.json();
                 }
 
-                analysisData = await resp.json();
                 currentScanId = analysisData.scan_id;
                 if (analysisData.patient_id) {
                     selectedPatientId = analysisData.patient_id;
@@ -5209,6 +5507,8 @@
                 await loadBrainFromAnalysis(analysisData);
             } catch (error) {
                 updateStatus(`Error loading demo: ${error.message}`);
+                const overlay = document.getElementById("upload-overlay");
+                if (overlay) overlay.style.display = "";
                 updateJobInfo("No active job");
             }
         }
@@ -5348,6 +5648,8 @@
                     console.warn("Detailed report prefetch failed:", error);
                 });
             } catch (error) {
+                const overlay = document.getElementById("upload-overlay");
+                if (overlay) overlay.style.display = "";
                 setRenderLoaderState({
                     active: true,
                     progress: 100,
@@ -5514,6 +5816,16 @@
             renderViewerInsights(null, null);
             updateViewerReferenceReadout();
             updateViewerToolOutput("Advanced 3D tools ready: distance measurement, lesion bookmarks, and DICOM-linked targeting.");
+            initDynamicWorkspaceLayout();
+
+            if (IS_FULLSCREEN_VIEWER_ROUTE && scene && !brainGroup) {
+                brainGroup = buildDemoBrain({ scan_id: "precision-preview", patient_id: "precision-preview", damage_summary: [] });
+                scene.add(brainGroup);
+            }
+
+            if (IS_FULLSCREEN_VIEWER_ROUTE && ROUTE_SCAN_ID && !currentScanId) {
+                loadDemo(ROUTE_PATIENT_ID || selectedPatientId || "", ROUTE_SCAN_ID);
+            }
 
             if (authToken) {
                 setAuthState("Session restored", "ok");
@@ -5551,6 +5863,7 @@
             document.getElementById("btn-3d-clear-bookmarks").addEventListener("click", () => {
                 clearViewerBookmarks();
             });
+            const inlineFullscreenButton = document.getElementById("btn-inline-fullscreen");
             document.getElementById("clip-slider").addEventListener("input", (event) => {
                 applyClipDepthFromSlider(event.target.value);
             });
@@ -5783,16 +6096,72 @@
                 }
             });
 
-            document.getElementById("nav-viewer").addEventListener("click", () => {
-                document.getElementById("nav-viewer").classList.add("active");
-                document.getElementById("nav-report").classList.remove("active");
-            });
+            const navViewer = document.getElementById("nav-viewer");
+            const navReport = document.getElementById("nav-report");
+            const navFullscreen = document.getElementById("nav-fullscreen-viewer");
+            const isFullscreenViewerRoute = IS_FULLSCREEN_VIEWER_ROUTE;
+            const goToViewerRoute = () => {
+                window.location.href = "/";
+            };
+            const goToFullscreenRoute = () => {
+                window.location.href = buildPrecisionViewerUrl();
+            };
 
-            document.getElementById("nav-report").addEventListener("click", () => {
-                document.getElementById("nav-report").classList.add("active");
-                document.getElementById("nav-viewer").classList.remove("active");
-                openReportViewForCurrentScan();
-            });
+            if (navViewer && navReport) {
+                navViewer.classList.toggle("active", !isFullscreenViewerRoute);
+                navReport.classList.remove("active");
+            }
+
+            if (navFullscreen) {
+                navFullscreen.classList.toggle("active", isFullscreenViewerRoute);
+                navFullscreen.textContent = isFullscreenViewerRoute ? "Exit Precision" : "Precision View";
+            }
+
+            if (inlineFullscreenButton) {
+                inlineFullscreenButton.textContent = isFullscreenViewerRoute ? "Exit Fullscreen 3D" : "Fullscreen 3D";
+                inlineFullscreenButton.classList.toggle("active", isFullscreenViewerRoute);
+            }
+
+            if (navViewer) {
+                navViewer.addEventListener("click", () => {
+                    if (isFullscreenViewerRoute) {
+                        goToViewerRoute();
+                        return;
+                    }
+                    navViewer.classList.add("active");
+                    if (navReport) navReport.classList.remove("active");
+                    if (navFullscreen) navFullscreen.classList.remove("active");
+                });
+            }
+
+            if (navReport) {
+                navReport.addEventListener("click", () => {
+                    navReport.classList.add("active");
+                    if (navViewer) navViewer.classList.remove("active");
+                    if (navFullscreen) navFullscreen.classList.remove("active");
+                    openReportViewForCurrentScan();
+                });
+            }
+
+            if (navFullscreen) {
+                navFullscreen.addEventListener("click", () => {
+                    if (isFullscreenViewerRoute) {
+                        goToViewerRoute();
+                        return;
+                    }
+                    goToFullscreenRoute();
+                });
+            }
+
+            if (inlineFullscreenButton) {
+                inlineFullscreenButton.addEventListener("click", () => {
+                    if (isFullscreenViewerRoute) {
+                        goToViewerRoute();
+                        return;
+                    }
+                    goToFullscreenRoute();
+                });
+            }
         }
 
         if (document.readyState === "loading") {
