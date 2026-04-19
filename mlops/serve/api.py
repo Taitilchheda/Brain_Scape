@@ -2249,6 +2249,16 @@ def _ensure_report_pdf(
         elements: list[Any] = []
 
         elements.append(Paragraph(title, styles["Title"]))
+        
+        # High Risk Banner
+        if str(quantitative_metrics.get("risk_band", "")).lower() == "high":
+            banner_style = getSampleStyleSheet()["Normal"]
+            banner_style.backColor = colors.red
+            banner_style.textColor = colors.white
+            banner_style.alignment = 1 # Center
+            elements.append(Paragraph("<br/><b>CRITICAL: HIGH RISK NEUROLOGIC PATTERN DETECTED</b><br/>", banner_style))
+            elements.append(Spacer(1, 10))
+
         elements.append(Paragraph(f"Patient Name: {analysis.get('patient_name', 'Taitil Chheda')}", styles["Heading3"]))
         elements.append(Paragraph(f"Patient ID: {analysis.get('patient_code', 'BS-999')} | Age: {analysis.get('age', '42')} | Sex: {analysis.get('sex', 'M')}", styles["Normal"]))
         elements.append(Paragraph(f"Scan ID: {scan_id} | Modality: {', '.join(analysis.get('modalities', ['MRI_T1']))}", styles["Normal"]))
