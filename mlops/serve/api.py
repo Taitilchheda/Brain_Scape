@@ -1096,7 +1096,7 @@ async def get_report(
 
     return {
         "scan_id": scan_id,
-        "pdf_url": f"/outputs/reports/{scan_id}/{pdf_path.name}",
+        "pdf_url": f"/outputs/reports/{scan_id}/{pdf_path.name}?t={int(datetime.now().timestamp())}",
         "pdf_available": pdf_path.exists(),
         "summary": summary,
         "template": template,
