@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="720" viewBox="0 0 1220 720">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1220" height="720"/>
+<text x="70" y="65" class="title">Visual Analytics: Governance Dashboard</text>
+<text x="70" y="95" class="subtitle">RBAC outcome split and dominant audited actions</text>
+<rect class="panel" x="70" y="130" width="470" height="520" rx="16"/>
+<text x="95" y="170" class="subtitle">Outcome Split</text>
+<rect x="120" y="253.7" width="130" height="316.3" fill="#27AE60"/>
+<rect x="120" y="230.0" width="130" height="23.7" fill="#E74C3C"/>
+<rect x="120" y="230" width="130" height="340" fill="none" stroke="#334155"/>
+<text x="290" y="350" class="label">Allowed: 400</text>
+<text x="290" y="386" class="label">Denied: 30</text>
+<text x="290" y="440" class="small">Total events: 430</text>
+<text x="290" y="472" class="small">Unique users: 10</text>
+<text x="290" y="504" class="small">Unique actions: 31</text>
+<rect class="panel" x="590" y="130" width="560" height="520" rx="16"/>
+<text x="615" y="170" class="subtitle">Top Audited Actions</text>
+<text x="615" y="218" class="label">GET /patients</text>
+<rect x="615" y="230" width="340.0" height="44" rx="8" fill="#16A085"/>
+<text x="967.0" y="259" class="value">162</text>
+<text x="615" y="348" class="label">POST /ingest</text>
+<rect x="615" y="360" width="138.5" height="44" rx="8" fill="#16A085"/>
+<text x="765.5" y="389" class="value">66</text>
+<text x="615" y="478" class="label">POST /signoff/demo-scan-002</text>
+<rect x="615" y="490" width="113.3" height="44" rx="8" fill="#16A085"/>
+<text x="740.3" y="519" class="value">54</text>
+</svg>

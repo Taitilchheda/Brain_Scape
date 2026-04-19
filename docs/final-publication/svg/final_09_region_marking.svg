@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1280" height="660"/>
+<text x="60" y="56" class="title">Region Marking and Severity Labeling</text>
+<text x="60" y="86" class="subtitle">Severity-color marking distribution with top high-burden regions</text>
+<rect class="panel" x="70" y="120" width="1140" height="140" rx="14"/>
+<text x="100" y="160" class="label">Severity-colored regional marks (total labels): 392</text>
+<rect x="90.0" y="180" width="413.7" height="54" fill="#2563EB"/>
+<text x="296.9" y="214" class="small" text-anchor="middle" fill="#111827">BLUE 159</text>
+<rect x="503.7" y="180" width="208.2" height="54" fill="#16A34A"/>
+<text x="607.8" y="214" class="small" text-anchor="middle" fill="#111827">GREEN 80</text>
+<rect x="711.9" y="180" width="174.3" height="54" fill="#EAB308"/>
+<text x="799.1" y="214" class="small" text-anchor="middle" fill="#111827">YELLOW 67</text>
+<rect x="886.2" y="180" width="88.5" height="54" fill="#F97316"/>
+<text x="930.5" y="214" class="small" text-anchor="middle" fill="#111827">ORANGE 34</text>
+<rect x="974.7" y="180" width="135.3" height="54" fill="#DC2626"/>
+<text x="1042.3" y="214" class="small" text-anchor="middle" fill="#111827">RED 52</text>
+<rect x="90" y="180" width="1020" height="54" fill="none" stroke="#1F2937"/>
+<rect class="panel" x="70" y="300" width="1140" height="300" rx="14"/>
+<text x="100" y="340" class="label">Top marked regions (severity GE 2)</text>
+<text x="100" y="380" class="small">Precentral_R: frequency 35, mean burden 22.10%</text>
+<text x="100" y="422" class="small">Hippocampus_R: frequency 21, mean burden 28.61%</text>
+<text x="100" y="464" class="small">Precentral_L: frequency 19, mean burden 24.70%</text>
+<text x="100" y="506" class="small">Hippocampus_L: frequency 19, mean burden 26.37%</text>
+<text x="100" y="548" class="small">Parietal_Inf_L: frequency 19, mean burden 24.57%</text>
+</svg>

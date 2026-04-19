@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="640" viewBox="0 0 1320 640">
+    <style>
+      .t { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .s { font: 600 19px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .l { font: 600 16px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .v { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .sm { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.8; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect x="0" y="0" width="1320" height="640" fill="#F8FBFF"/>
+<text x="42" y="48" class="t">Governance Panel: Allowed vs Denied and Audit Completeness</text>
+<text x="42" y="74" class="s">Authorization enforcement and traceability coverage</text>
+<rect class="panel" x="70" y="120" width="560" height="470" rx="16"/>
+<rect class="panel" x="690" y="120" width="560" height="470" rx="16"/>
+<rect x="170" y="212.3" width="160" height="297.7" fill="#16A34A"/>
+<rect x="170" y="190.0" width="160" height="22.3" fill="#DC2626"/>
+<rect x="170" y="190" width="160" height="320" fill="none" stroke="#334155"/>
+<text x="380" y="250" class="l">Allowed: 400</text>
+<text x="380" y="286" class="l">Denied: 30</text>
+<text x="380" y="322" class="sm">Total events: 430</text>
+<text x="380" y="356" class="sm">Unauthorized block rate: 100.0%</text>
+<circle cx="970" cy="320" r="101" stroke="#D1D5DB" stroke-width="38" fill="none"/>
+<circle cx="970" cy="320" r="101" stroke="#0D9488" stroke-width="38" fill="none" stroke-dasharray="634.60 634.60" transform="rotate(-90 970 320)"/>
+<text x="970" y="314" class="t" text-anchor="middle">100.0%</text>
+<text x="970" y="344" class="sm" text-anchor="middle">Audit completeness</text>
+<text x="780" y="490" class="sm">Required fields: timestamp, user, role, action, outcome</text>
+</svg>

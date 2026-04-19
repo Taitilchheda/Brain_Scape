@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="760" viewBox="0 0 1100 760">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1100" height="760"/>
+<text x="70" y="65" class="title">Results Table: Cohort and Core Output Metrics</text>
+<text x="70" y="95" class="subtitle">Brain_Scape project summary (n = 49 scans)</text>
+<rect class="panel" x="70" y="120" width="960" height="52" rx="10"/>
+<text x="90" y="153" class="label">Metric</text>
+<text x="880" y="153" class="label">Value</text>
+<rect x="70" y="172" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="90" y="205" class="label">Total analyzed scans</text>
+<text x="880" y="205" class="value">49</text>
+<rect x="70" y="224" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="90" y="257" class="label">MRI_T1 scans</text>
+<text x="880" y="257" class="value">45</text>
+<rect x="70" y="276" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="90" y="309" class="label">fMRI scans</text>
+<text x="880" y="309" class="value">4</text>
+<rect x="70" y="328" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="90" y="361" class="label">Mean overall confidence</text>
+<text x="880" y="361" class="value">0.723</text>
+<rect x="70" y="380" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="90" y="413" class="label">Mean triage score</text>
+<text x="880" y="413" class="value">8.19</text>
+<rect x="70" y="432" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="90" y="465" class="label">Mean flagged regions</text>
+<text x="880" y="465" class="value">3.12</text>
+<rect x="70" y="484" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="90" y="517" class="label">Mean severe regions</text>
+<text x="880" y="517" class="value">1.06</text>
+<rect x="70" y="536" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="90" y="569" class="label">Mean flagged volume (mm3)</text>
+<text x="880" y="569" class="value">6939.2</text>
+<rect x="70" y="588" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="90" y="621" class="label">Mean severe volume (mm3)</text>
+<text x="880" y="621" class="value">3113.6</text>
+<rect x="70" y="640" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="90" y="673" class="label">Mean highest regional burden (%)</text>
+<text x="880" y="673" class="value">25.39</text>
+</svg>

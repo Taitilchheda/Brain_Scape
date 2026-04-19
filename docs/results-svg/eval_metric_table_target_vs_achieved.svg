@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="640" viewBox="0 0 1320 640">
+    <style>
+      .t { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .s { font: 600 19px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .l { font: 600 16px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .v { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .sm { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.8; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect x="0" y="0" width="1320" height="640" fill="#F8FBFF"/>
+<text x="42" y="48" class="t">Metric Table: Targets vs Achieved</text>
+<text x="42" y="74" class="s">Computed from current outputs and audit logs</text>
+<rect class="panel" x="42" y="100" width="1236" height="56" rx="8"/>
+<text x="56" y="136" class="l">Metric</text>
+<text x="662" y="136" class="l">Target</text>
+<text x="862" y="136" class="l">Achieved</text>
+<text x="1102" y="136" class="l">Status</text>
+<rect x="42" y="156" width="1236" height="56" fill="#FFFFFF" stroke="#D1D9E6"/>
+<text x="56" y="192" class="l">Mean overall confidence</text>
+<text x="662" y="192" class="l">GE 0.70</text>
+<text x="862" y="192" class="v">0.723</text>
+<text x="1102" y="192" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+<rect x="42" y="212" width="1236" height="56" fill="#F2F7FD" stroke="#D1D9E6"/>
+<text x="56" y="248" class="l">ECE summary (internal proxy)</text>
+<text x="662" y="248" class="l">LE 0.05</text>
+<text x="862" y="248" class="v">0.216</text>
+<text x="1102" y="248" style="font:700 18px Segoe UI; fill:#DC2626">FAIL</text>
+<rect x="42" y="268" width="1236" height="56" fill="#FFFFFF" stroke="#D1D9E6"/>
+<text x="56" y="304" class="l">Clinician agreement (proxy)</text>
+<text x="662" y="304" class="l">GE 0.85</text>
+<text x="862" y="304" class="v">1.000</text>
+<text x="1102" y="304" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+<rect x="42" y="324" width="1236" height="56" fill="#F2F7FD" stroke="#D1D9E6"/>
+<text x="56" y="360" class="l">Analysis success rate</text>
+<text x="662" y="360" class="l">GE 0.95</text>
+<text x="862" y="360" class="v">1.000</text>
+<text x="1102" y="360" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+<rect x="42" y="380" width="1236" height="56" fill="#FFFFFF" stroke="#D1D9E6"/>
+<text x="56" y="416" class="l">Workflow p95 runtime sec (proxy)</text>
+<text x="662" y="416" class="l">LE 2.00</text>
+<text x="862" y="416" class="v">1.729</text>
+<text x="1102" y="416" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+<rect x="42" y="436" width="1236" height="56" fill="#F2F7FD" stroke="#D1D9E6"/>
+<text x="56" y="472" class="l">Unauthorized block rate</text>
+<text x="662" y="472" class="l">EQ 1.00</text>
+<text x="862" y="472" class="v">1.000</text>
+<text x="1102" y="472" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+<rect x="42" y="492" width="1236" height="56" fill="#FFFFFF" stroke="#D1D9E6"/>
+<text x="56" y="528" class="l">Audit completeness</text>
+<text x="662" y="528" class="l">EQ 1.00</text>
+<text x="862" y="528" class="v">1.000</text>
+<text x="1102" y="528" style="font:700 18px Segoe UI; fill:#16A34A">PASS</text>
+</svg>

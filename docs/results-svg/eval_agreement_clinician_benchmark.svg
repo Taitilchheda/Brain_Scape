@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="640" viewBox="0 0 1320 640">
+    <style>
+      .t { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .s { font: 600 19px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .l { font: 600 16px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .v { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .sm { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.8; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect x="0" y="0" width="1320" height="640" fill="#F8FBFF"/>
+<text x="42" y="48" class="t">Agreement Metric vs Clinician Benchmark</text>
+<text x="42" y="74" class="s">Metric: clinician signoff concordance proxy</text>
+<rect class="panel" x="60" y="110" width="1200" height="460" rx="14"/>
+<line x1="160" y1="300" x2="1060" y2="300" class="axis"/>
+<line x1="160.0" y1="290" x2="160.0" y2="310" class="axis"/>
+<text x="160.0" y="334" class="sm" text-anchor="middle">0.0</text>
+<line x1="340.0" y1="290" x2="340.0" y2="310" class="axis"/>
+<text x="340.0" y="334" class="sm" text-anchor="middle">0.2</text>
+<line x1="520.0" y1="290" x2="520.0" y2="310" class="axis"/>
+<text x="520.0" y="334" class="sm" text-anchor="middle">0.4</text>
+<line x1="700.0" y1="290" x2="700.0" y2="310" class="axis"/>
+<text x="700.0" y="334" class="sm" text-anchor="middle">0.6</text>
+<line x1="880.0" y1="290" x2="880.0" y2="310" class="axis"/>
+<text x="880.0" y="334" class="sm" text-anchor="middle">0.8</text>
+<line x1="1060.0" y1="290" x2="1060.0" y2="310" class="axis"/>
+<text x="1060.0" y="334" class="sm" text-anchor="middle">1.0</text>
+<line x1="925.0" y1="210" x2="925.0" y2="390" stroke="#DC2626" stroke-width="3"/>
+<text x="925.0" y="196" class="sm" text-anchor="middle">Benchmark 0.85</text>
+<rect x="160" y="270" width="900.0" height="60" rx="10" fill="#16A34A"/>
+<text x="1072.0" y="307" class="v">Achieved 1.00</text>
+<text x="160" y="430" class="l">Clinician signoff samples: 30</text>
+<text x="160" y="462" class="sm">Proxy definition: approvals divided by clinician signoff submissions</text>
+</svg>

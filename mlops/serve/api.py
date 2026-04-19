@@ -161,7 +161,7 @@ class PatientCreateRequest(BaseModel):
 _job_store: dict[str, dict] = {}
 _UPLOADED_ANALYSES: dict[str, dict] = {}
 _VOLUME_PAYLOAD_CACHE: dict[str, dict] = {}
-_VOLUME_PAYLOAD_SCHEMA_VERSION = "ras-canonical-v2-zyx-pack"
+_VOLUME_PAYLOAD_SCHEMA_VERSION = "ras-canonical-v3-real-damage-map"
 _RUNTIME_CONTEXT_STORE: dict[str, dict[str, Any]] = {}
 _SIGNOFF_STORE: dict[str, list[dict[str, Any]]] = {}
 _CRITICAL_ACK_STORE: dict[str, list[dict[str, Any]]] = {}
@@ -3232,6 +3232,31 @@ def _resolve_scan_volume_path(scan_id: str, analysis: dict) -> Path:
     raise FileNotFoundError(f"Could not resolve source volume for scan {scan_id}")
 
 
+def _resolve_scan_severity_map_path(scan_id: str, analysis: dict) -> Optional[Path]:
+    """Resolve voxel-level severity map path when available for real hotspot mapping."""
+    candidate_paths: list[Path] = []
+
+    for key in ("severity_map_path", "severity_map", "severity_nifti_path"):
+        hint = analysis.get(key)
+        if hint:
+            candidate_paths.append(Path(str(hint)))
+
+    candidate_paths.append(_OUTPUTS_DIR / "analysis" / scan_id / "severity_map.nii.gz")
+
+    base_scan_id = scan_id.removesuffix("-prev")
+    if base_scan_id != scan_id:
+        candidate_paths.append(_OUTPUTS_DIR / "analysis" / base_scan_id / "severity_map.nii.gz")
+
+    for candidate in candidate_paths:
+        resolved = candidate
+        if not resolved.is_absolute():
+            resolved = (_PROJECT_DIR / resolved).resolve()
+        if resolved.exists():
+            return resolved
+
+    return None
+
+
 def _region_focus_profile(region_name: str) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     name = (region_name or "").lower()
 
@@ -3287,6 +3312,45 @@ def _build_damage_volume(shape: tuple[int, int, int], regions: list[dict]) -> "n
     return np.clip(damage, 0.0, 1.0)
 
 
+def _load_resampled_severity_volume(
+    severity_map_path: Path,
+    target_shape: tuple[int, int, int],
+) -> "np.ndarray":
+    """Load and normalize severity map into target volume shape."""
+    import nibabel as nib
+    import numpy as np
+    from scipy import ndimage
+
+    sev_img = nib.load(str(severity_map_path))
+    sev_img = nib.as_closest_canonical(sev_img)
+    sev = np.asarray(sev_img.get_fdata(dtype=np.float32))
+
+    if sev.ndim == 4:
+        sev = np.mean(sev, axis=3)
+    elif sev.ndim != 3:
+        sev = np.asarray(sev).squeeze()
+        if sev.ndim != 3:
+            raise ValueError(f"Unsupported severity map shape: {sev.shape}")
+
+    sev = np.nan_to_num(sev, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if tuple(sev.shape) != tuple(target_shape):
+        zoom_factors = tuple(float(target_shape[i]) / float(sev.shape[i]) for i in range(3))
+        sev = ndimage.zoom(sev, zoom=zoom_factors, order=1)
+
+    non_zero = sev[sev > 0]
+    if non_zero.size == 0:
+        return np.zeros(target_shape, dtype=np.float32)
+
+    p95 = float(np.percentile(non_zero, 95))
+    if p95 <= 1e-6:
+        return np.zeros(target_shape, dtype=np.float32)
+
+    sev_norm = np.clip(sev / p95, 0.0, 1.0).astype(np.float32)
+    sev_norm = ndimage.gaussian_filter(sev_norm, sigma=0.5)
+    return np.clip(sev_norm, 0.0, 1.0)
+
+
 def _build_synthetic_volume_channels(
     analysis: dict,
     target_shape: tuple[int, int, int] = (96, 96, 96),
@@ -3333,7 +3397,12 @@ def _build_synthetic_volume_channels(
     return rgba_web.tobytes(order="C"), tuple(int(v) for v in target_shape), spacing_mm, modality
 
 
-def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tuple[int, int, int] = (96, 96, 96)) -> tuple[bytes, tuple[int, int, int], list[float], str]:
+def _prepare_volume_channels(
+    source_path: Path,
+    analysis: dict,
+    target_shape: tuple[int, int, int] = (96, 96, 96),
+    severity_map_path: Optional[Path] = None,
+) -> tuple[bytes, tuple[int, int, int], list[float], str, str]:
     import nibabel as nib
     import numpy as np
     from scipy import ndimage
@@ -3384,7 +3453,19 @@ def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tu
     white = np.clip((norm - 0.56) / 0.42, 0.0, 1.0) * brain_mask
     gray = np.clip((norm - 0.22) / 0.48, 0.0, 1.0) * brain_mask * (1.0 - (white * 0.35))
 
-    damage = _build_damage_volume(norm.shape, list(analysis.get("damage_summary", []))) * brain_mask
+    damage_source = "analysis_damage_summary"
+    damage = None
+    if severity_map_path and severity_map_path.exists():
+        try:
+            severity_damage = _load_resampled_severity_volume(severity_map_path, norm.shape)
+            if float(np.max(severity_damage)) > 0.0:
+                damage = np.clip(severity_damage * brain_mask, 0.0, 1.0)
+                damage_source = "severity_map"
+        except Exception as exc:
+            logger.warning(f"Severity map fallback for {source_path} ({severity_map_path}): {exc}")
+
+    if damage is None:
+        damage = _build_damage_volume(norm.shape, list(analysis.get("damage_summary", []))) * brain_mask
 
     rgba = np.empty((*norm.shape, 4), dtype=np.uint8)
     rgba[..., 0] = np.clip(norm * 255.0, 0, 255).astype(np.uint8)
@@ -3398,7 +3479,13 @@ def _prepare_volume_channels(source_path: Path, analysis: dict, target_shape: tu
     voxel_sizes = np.array(img.header.get_zooms()[:3], dtype=np.float32)
     scaled_spacing = (voxel_sizes * (original_shape / np.array(norm.shape, dtype=np.float32))).tolist()
 
-    return rgba_web.tobytes(order="C"), tuple(int(v) for v in norm.shape), [float(v) for v in scaled_spacing], modality
+    return (
+        rgba_web.tobytes(order="C"),
+        tuple(int(v) for v in norm.shape),
+        [float(v) for v in scaled_spacing],
+        modality,
+        damage_source,
+    )
 
 
 def _build_volume_payload(
@@ -3408,16 +3495,24 @@ def _build_volume_payload(
     resolution: str = "standard",
 ) -> dict:
     target_shape = _volume_target_shape(resolution)
+    severity_map_path = _resolve_scan_severity_map_path(scan_id, analysis)
+    severity_cache_suffix = ":sev:none"
+    if severity_map_path and severity_map_path.exists():
+        sev_stat = severity_map_path.stat()
+        severity_cache_suffix = f":sev:{int(sev_stat.st_mtime)}:{int(sev_stat.st_size)}"
+
     if source_path and source_path.exists():
         stat = source_path.stat()
         cache_key = (
             f"{scan_id}:{int(stat.st_mtime)}:{int(stat.st_size)}"
             f":{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+            f"{severity_cache_suffix}"
             f":{_VOLUME_PAYLOAD_SCHEMA_VERSION}"
         )
     else:
         cache_key = (
             f"{scan_id}:synthetic:{resolution}:{target_shape[0]}x{target_shape[1]}x{target_shape[2]}"
+            f"{severity_cache_suffix}"
             f":{_VOLUME_PAYLOAD_SCHEMA_VERSION}"
         )
 
@@ -3429,6 +3524,7 @@ def _build_volume_payload(
 
     synthetic_fallback = False
     source_rel = "synthetic://analysis-fallback"
+    damage_source = "analysis_damage_summary"
 
     if source_path and source_path.exists():
         try:
@@ -3437,10 +3533,11 @@ def _build_volume_payload(
             source_rel = str(source_path)
 
         try:
-            rgba_bytes, shape, spacing_mm, modality = _prepare_volume_channels(
+            rgba_bytes, shape, spacing_mm, modality, damage_source = _prepare_volume_channels(
                 source_path,
                 analysis,
                 target_shape=target_shape,
+                severity_map_path=severity_map_path,
             )
         except Exception as exc:
             logger.warning(
@@ -3452,6 +3549,7 @@ def _build_volume_payload(
             )
             source_rel = "synthetic://analysis-fallback"
             synthetic_fallback = True
+            damage_source = "analysis_damage_summary"
     else:
         logger.warning(f"No source NIfTI found for {scan_id}; using synthetic volume fallback")
         rgba_bytes, shape, spacing_mm, modality = _build_synthetic_volume_channels(
@@ -3459,6 +3557,7 @@ def _build_volume_payload(
             target_shape=target_shape,
         )
         synthetic_fallback = True
+        damage_source = "analysis_damage_summary"
 
     encoded = base64.b64encode(rgba_bytes).decode("ascii")
 
@@ -3474,6 +3573,8 @@ def _build_volume_payload(
         "source_nifti": source_rel,
         "synthetic_fallback": synthetic_fallback,
         "resolution_profile": resolution,
+        "damage_source": damage_source,
+        "damage_source_path": _project_relative(severity_map_path) if damage_source == "severity_map" and severity_map_path else None,
     }
 
     if len(_VOLUME_PAYLOAD_CACHE) >= 16:

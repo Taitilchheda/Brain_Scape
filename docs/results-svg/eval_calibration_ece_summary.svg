@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="640" viewBox="0 0 1320 640">
+    <style>
+      .t { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .s { font: 600 19px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .l { font: 600 16px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .v { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .sm { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.8; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect x="0" y="0" width="1320" height="640" fill="#F8FBFF"/>
+<text x="42" y="48" class="t">Calibration Plot and ECE Summary</text>
+<text x="42" y="74" class="s">Internal consistency proxy using region confidence and burden coherence</text>
+<line x1="90.0" y1="120" x2="90.0" y2="580" class="grid"/>
+<line x1="90" y1="580.0" x2="850" y2="580.0" class="grid"/>
+<text x="90.0" y="604" class="sm" text-anchor="middle">0.0</text>
+<text x="80" y="585.0" class="sm" text-anchor="end">0.0</text>
+<line x1="242.0" y1="120" x2="242.0" y2="580" class="grid"/>
+<line x1="90" y1="488.0" x2="850" y2="488.0" class="grid"/>
+<text x="242.0" y="604" class="sm" text-anchor="middle">0.2</text>
+<text x="80" y="493.0" class="sm" text-anchor="end">0.2</text>
+<line x1="394.0" y1="120" x2="394.0" y2="580" class="grid"/>
+<line x1="90" y1="396.0" x2="850" y2="396.0" class="grid"/>
+<text x="394.0" y="604" class="sm" text-anchor="middle">0.4</text>
+<text x="80" y="401.0" class="sm" text-anchor="end">0.4</text>
+<line x1="546.0" y1="120" x2="546.0" y2="580" class="grid"/>
+<line x1="90" y1="304.0" x2="850" y2="304.0" class="grid"/>
+<text x="546.0" y="604" class="sm" text-anchor="middle">0.6</text>
+<text x="80" y="309.0" class="sm" text-anchor="end">0.6</text>
+<line x1="698.0" y1="120" x2="698.0" y2="580" class="grid"/>
+<line x1="90" y1="212.0" x2="850" y2="212.0" class="grid"/>
+<text x="698.0" y="604" class="sm" text-anchor="middle">0.8</text>
+<text x="80" y="217.0" class="sm" text-anchor="end">0.8</text>
+<line x1="850.0" y1="120" x2="850.0" y2="580" class="grid"/>
+<line x1="90" y1="120.0" x2="850" y2="120.0" class="grid"/>
+<text x="850.0" y="604" class="sm" text-anchor="middle">1.0</text>
+<text x="80" y="125.0" class="sm" text-anchor="end">1.0</text>
+<line x1="90" y1="580" x2="850" y2="580" class="axis"/>
+<line x1="90" y1="120" x2="90" y2="580" class="axis"/>
+<line x1="90" y1="580" x2="850" y2="120" stroke="#9CA3AF" stroke-dasharray="6 6" stroke-width="2"/>
+<text x="840" y="140" class="sm" text-anchor="end">Perfect calibration</text>
+<polyline fill="none" stroke="#2563EB" stroke-width="3" points="531.4,120.0 571.5,120.0 682.8,120.0 758.8,120.0 798.3,120.0"/>
+<circle cx="531.4" cy="120.0" r="4.6" fill="#2563EB" fill-opacity="0.7"/>
+<circle cx="571.5" cy="120.0" r="11.8" fill="#2563EB" fill-opacity="0.7"/>
+<circle cx="682.8" cy="120.0" r="5.4" fill="#2563EB" fill-opacity="0.7"/>
+<circle cx="758.8" cy="120.0" r="6.8" fill="#2563EB" fill-opacity="0.7"/>
+<circle cx="798.3" cy="120.0" r="11.0" fill="#2563EB" fill-opacity="0.7"/>
+<rect class="panel" x="900" y="140" width="360" height="360" rx="12"/>
+<text x="930" y="190" class="l">ECE (proxy)</text>
+<text x="930" y="228" class="v">0.2158</text>
+<text x="930" y="268" class="l">Target</text>
+<text x="930" y="306" class="v">LE 0.0500</text>
+<text x="930" y="350" style="font:700 20px Segoe UI; fill:#D97706">NEEDS CALIBRATION</text>
+<text x="930" y="392" class="sm">Scans: 49</text>
+<text x="930" y="418" class="sm">Region samples: 392</text>
+</svg>

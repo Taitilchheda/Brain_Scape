@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="650" viewBox="0 0 1240 650">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1240" height="650"/>
+<text x="60" y="56" class="title">Final Severity Distribution</text>
+<text x="60" y="86" class="subtitle">Regional severity composition across publication cohort</text>
+<line x1="180" y1="580" x2="1120" y2="580" class="axis"/>
+<line x1="180" y1="180" x2="180" y2="580" class="axis"/>
+<rect x="220" y="220.0" width="130" height="360.0" rx="8" fill="#2563EB"/>
+<text x="285.0" y="210.0" class="value" text-anchor="middle">159</text>
+<text x="285.0" y="242.0" class="small" text-anchor="middle">40.56%</text>
+<text x="285.0" y="614" class="label" text-anchor="middle">BLUE</text>
+<rect x="405" y="398.9" width="130" height="181.1" rx="8" fill="#16A34A"/>
+<text x="470.0" y="388.9" class="value" text-anchor="middle">80</text>
+<text x="470.0" y="420.9" class="small" text-anchor="middle">20.41%</text>
+<text x="470.0" y="614" class="label" text-anchor="middle">GREEN</text>
+<rect x="590" y="428.3" width="130" height="151.7" rx="8" fill="#EAB308"/>
+<text x="655.0" y="418.3" class="value" text-anchor="middle">67</text>
+<text x="655.0" y="450.3" class="small" text-anchor="middle">17.09%</text>
+<text x="655.0" y="614" class="label" text-anchor="middle">YELLOW</text>
+<rect x="775" y="503.0" width="130" height="77.0" rx="8" fill="#F97316"/>
+<text x="840.0" y="493.0" class="value" text-anchor="middle">34</text>
+<text x="840.0" y="525.0" class="small" text-anchor="middle">8.67%</text>
+<text x="840.0" y="614" class="label" text-anchor="middle">ORANGE</text>
+<rect x="960" y="462.3" width="130" height="117.7" rx="8" fill="#DC2626"/>
+<text x="1025.0" y="452.3" class="value" text-anchor="middle">52</text>
+<text x="1025.0" y="484.3" class="small" text-anchor="middle">13.27%</text>
+<text x="1025.0" y="614" class="label" text-anchor="middle">RED</text>
+</svg>

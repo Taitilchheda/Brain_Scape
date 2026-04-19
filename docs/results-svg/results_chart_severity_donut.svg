@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1120" height="760"/>
+<text x="70" y="65" class="title">Chart: Severity Class Composition</text>
+<text x="70" y="95" class="subtitle">Distribution across all regional summaries</text>
+<path d="M 360.00 140.00 A 220 220 0 0 1 482.96 542.43 L 427.07 459.51 A 120 120 0 0 0 360.00 240.00 Z" fill="#3498DB" stroke="#fff" stroke-width="2"/>
+<path d="M 482.96 542.43 A 220 220 0 0 1 220.09 529.78 L 283.69 452.61 A 120 120 0 0 0 427.07 459.51 Z" fill="#27AE60" stroke="#fff" stroke-width="2"/>
+<path d="M 220.09 529.78 A 220 220 0 0 1 144.06 317.95 L 242.21 337.06 A 120 120 0 0 0 283.69 452.61 Z" fill="#F1C40F" stroke="#fff" stroke-width="2"/>
+<path d="M 144.06 317.95 A 220 220 0 0 1 197.14 212.09 L 271.17 279.32 A 120 120 0 0 0 242.21 337.06 Z" fill="#F39C12" stroke="#fff" stroke-width="2"/>
+<path d="M 197.14 212.09 A 220 220 0 0 1 360.00 140.00 L 360.00 240.00 A 120 120 0 0 0 271.17 279.32 Z" fill="#E74C3C" stroke="#fff" stroke-width="2"/>
+<text x="360" y="354" class="value" text-anchor="middle">392</text>
+<text x="360" y="384" class="small" text-anchor="middle">Total Regions</text>
+<rect x="700" y="170" width="24" height="24" fill="#3498DB"/>
+<text x="736" y="190" class="label">BLUE: 159 (40.56%)</text>
+<rect x="700" y="244" width="24" height="24" fill="#27AE60"/>
+<text x="736" y="264" class="label">GREEN: 80 (20.41%)</text>
+<rect x="700" y="318" width="24" height="24" fill="#F1C40F"/>
+<text x="736" y="338" class="label">YELLOW: 67 (17.09%)</text>
+<rect x="700" y="392" width="24" height="24" fill="#F39C12"/>
+<text x="736" y="412" class="label">ORANGE: 34 (8.67%)</text>
+<rect x="700" y="466" width="24" height="24" fill="#E74C3C"/>
+<text x="736" y="486" class="label">RED: 52 (13.27%)</text>
+</svg>

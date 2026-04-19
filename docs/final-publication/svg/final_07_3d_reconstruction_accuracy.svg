@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="680" viewBox="0 0 1280 680">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1280" height="680"/>
+
+<text x="60" y="58" class="title">Accurate 3D Reconstruction Evidence</text>
+<text x="60" y="88" class="subtitle">Mesh coverage and reconstruction artifact availability from publication cohort</text>
+
+<rect class="panel" x="70" y="120" width="360" height="230" rx="16"/>
+<text x="100" y="168" class="label">Cohort rows</text>
+<text x="100" y="214" class="title" style="font-size:52px">49</text>
+<text x="100" y="252" class="small">Publication-eligible analyses</text>
+
+<rect class="panel" x="460" y="120" width="360" height="230" rx="16"/>
+<text x="490" y="168" class="label">Rows with 3D face metadata</text>
+<text x="490" y="214" class="title" style="font-size:52px">49/49</text>
+<text x="490" y="252" class="small">Coverage: 100.0%</text>
+
+<rect class="panel" x="850" y="120" width="360" height="230" rx="16"/>
+<text x="880" y="168" class="label">Face count consistency</text>
+<text x="880" y="214" class="title" style="font-size:42px">40000 to 40000</text>
+<text x="880" y="252" class="small">Faces per scan (min to max)</text>
+
+<rect class="panel" x="70" y="390" width="1140" height="230" rx="16"/>
+<text x="100" y="438" class="label">Mesh export inventory</text>
+<text x="100" y="476" class="small">outputs/export OBJ files: 5</text>
+<text x="100" y="506" class="small">outputs/demo_mesh OBJ files: 10</text>
+<text x="100" y="536" class="value">Total available OBJ artifacts: 15</text>
+
+<line x1="520" y1="448" x2="780" y2="448" stroke="#334155" stroke-width="2"/>
+<line x1="520" y1="508" x2="780" y2="508" stroke="#334155" stroke-width="2"/>
+<line x1="520" y1="568" x2="780" y2="568" stroke="#334155" stroke-width="2"/>
+<text x="790" y="454" class="small">Reconstruction coverage proxy: face-metadata presence</text>
+<text x="790" y="514" class="small">Topology consistency proxy: stable face-count range</text>
+<text x="790" y="574" class="small">Deployment-readiness proxy: OBJ artifact generation</text>
+
+</svg>

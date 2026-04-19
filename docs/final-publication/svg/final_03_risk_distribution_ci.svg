@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="640" viewBox="0 0 1220 640">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1220" height="640"/>
+<text x="60" y="56" class="title">Final Risk Distribution with Wilson 95% CI</text>
+<text x="60" y="86" class="subtitle">Publication cohort risk stratification</text>
+<line x1="110" y1="560" x2="1100" y2="560" class="axis"/>
+<line x1="110" y1="180" x2="110" y2="560" class="axis"/>
+<rect x="220" y="200.0" width="220" height="360.0" rx="10" fill="#DC2626"/>
+<text x="330.0" y="190.0" class="value" text-anchor="middle">23</text>
+<text x="330.0" y="220.0" class="small" text-anchor="middle">46.94%</text>
+<text x="330.0" y="240.0" class="small" text-anchor="middle">CI 33.70 to 60.62</text>
+<text x="330.0" y="594" class="label" text-anchor="middle">High</text>
+<rect x="580" y="497.4" width="220" height="62.6" rx="10" fill="#D97706"/>
+<text x="690.0" y="487.4" class="value" text-anchor="middle">4</text>
+<text x="690.0" y="517.4" class="small" text-anchor="middle">8.16%</text>
+<text x="690.0" y="537.4" class="small" text-anchor="middle">CI 3.22 to 19.19</text>
+<text x="690.0" y="594" class="label" text-anchor="middle">Moderate</text>
+<rect x="940" y="215.7" width="220" height="344.3" rx="10" fill="#16A34A"/>
+<text x="1050.0" y="205.7" class="value" text-anchor="middle">22</text>
+<text x="1050.0" y="235.7" class="small" text-anchor="middle">44.90%</text>
+<text x="1050.0" y="255.7" class="small" text-anchor="middle">CI 31.85 to 58.69</text>
+<text x="1050.0" y="594" class="label" text-anchor="middle">Low</text>
+</svg>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="700" viewBox="0 0 1180 700">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1180" height="700"/>
+<text x="70" y="65" class="title">Visual Analytics: Top Affected Regions</text>
+<text x="70" y="95" class="subtitle">Frequency (severity >= 2) with burden annotation</text>
+<rect x="230" y="140" width="580.0" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="165" class="label" text-anchor="end">Precentral_R</text>
+<text x="820.0" y="165" class="value">35</text>
+<text x="980" y="165" class="small" text-anchor="end">Mean burden: 22.10%</text>
+<rect x="230" y="218" width="348.0" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="243" class="label" text-anchor="end">Hippocampus_R</text>
+<text x="588.0" y="243" class="value">21</text>
+<text x="980" y="243" class="small" text-anchor="end">Mean burden: 28.61%</text>
+<rect x="230" y="296" width="314.9" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="321" class="label" text-anchor="end">Parietal_Inf_L</text>
+<text x="554.9" y="321" class="value">19</text>
+<text x="980" y="321" class="small" text-anchor="end">Mean burden: 24.57%</text>
+<rect x="230" y="374" width="314.9" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="399" class="label" text-anchor="end">Precentral_L</text>
+<text x="554.9" y="399" class="value">19</text>
+<text x="980" y="399" class="small" text-anchor="end">Mean burden: 24.70%</text>
+<rect x="230" y="452" width="314.9" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="477" class="label" text-anchor="end">Hippocampus_L</text>
+<text x="554.9" y="477" class="value">19</text>
+<text x="980" y="477" class="small" text-anchor="end">Mean burden: 26.37%</text>
+<rect x="230" y="530" width="281.7" height="36" rx="8" fill="#1D70B8"/>
+<text x="218" y="555" class="label" text-anchor="end">Temporal_Mid_L</text>
+<text x="521.7" y="555" class="value">17</text>
+<text x="980" y="555" class="small" text-anchor="end">Mean burden: 23.50%</text>
+</svg>

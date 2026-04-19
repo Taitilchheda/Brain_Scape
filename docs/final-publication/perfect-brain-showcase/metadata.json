@@ -1,0 +1,7 @@
+{
+  "scan_id": "4b11d116-1e3e-4bef-a077-01f06d462523",
+  "nifti_source": "data/raw/uploads/brainscape_sample_fmri.nii.gz",
+  "analysis_source": "outputs/analysis/4b11d116-1e3e-4bef-a077-01f06d462523/analysis.json",
+  "surface_template_left": "c:\\Users\\taiti\\OneDrive\\Desktop\\Brain_Scape-taitil\\Brain_Scape-taitil\\.venv\\lib\\site-packages\\nilearn\\datasets\\data\\fsaverage5\\pial_left.gii.gz",
+  "surface_template_right": "c:\\Users\\taiti\\OneDrive\\Desktop\\Brain_Scape-taitil\\Brain_Scape-taitil\\.venv\\lib\\site-packages\\nilearn\\datasets\\data\\fsaverage5\\pial_right.gii.gz"
+}

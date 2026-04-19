@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="640" viewBox="0 0 1220 640">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1220" height="640"/>
+<text x="60" y="56" class="title">Final Top Regions Severity GE 2</text>
+<text x="60" y="86" class="subtitle">Frequency with mean burden and volume annotations</text>
+<rect x="250" y="140" width="620.0" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="168" class="label" text-anchor="end">Precentral_R</text>
+<text x="880.0" y="168" class="value">35</text>
+<text x="980" y="158" class="small" text-anchor="end">burden 22.10%</text>
+<text x="980" y="178" class="small" text-anchor="end">vol 1525.7 mm3</text>
+<rect x="250" y="214" width="372.0" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="242" class="label" text-anchor="end">Hippocampus_R</text>
+<text x="632.0" y="242" class="value">21</text>
+<text x="980" y="232" class="small" text-anchor="end">burden 28.61%</text>
+<text x="980" y="252" class="small" text-anchor="end">vol 1865.7 mm3</text>
+<rect x="250" y="288" width="336.6" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="316" class="label" text-anchor="end">Precentral_L</text>
+<text x="596.6" y="316" class="value">19</text>
+<text x="980" y="306" class="small" text-anchor="end">burden 24.70%</text>
+<text x="980" y="326" class="small" text-anchor="end">vol 4787.6 mm3</text>
+<rect x="250" y="362" width="336.6" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="390" class="label" text-anchor="end">Hippocampus_L</text>
+<text x="596.6" y="390" class="value">19</text>
+<text x="980" y="380" class="small" text-anchor="end">burden 26.37%</text>
+<text x="980" y="400" class="small" text-anchor="end">vol 2662.7 mm3</text>
+<rect x="250" y="436" width="336.6" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="464" class="label" text-anchor="end">Parietal_Inf_L</text>
+<text x="596.6" y="464" class="value">19</text>
+<text x="980" y="454" class="small" text-anchor="end">burden 24.57%</text>
+<text x="980" y="474" class="small" text-anchor="end">vol 1616.8 mm3</text>
+<rect x="250" y="510" width="301.1" height="44" rx="8" fill="#1D4ED8"/>
+<text x="236" y="538" class="label" text-anchor="end">Temporal_Mid_L</text>
+<text x="561.1" y="538" class="value">17</text>
+<text x="980" y="528" class="small" text-anchor="end">burden 23.50%</text>
+<text x="980" y="548" class="small" text-anchor="end">vol 1609.4 mm3</text>
+</svg>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="640" viewBox="0 0 1320 640">
+    <style>
+      .t { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .s { font: 600 19px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .l { font: 600 16px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .v { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .sm { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.8; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect x="0" y="0" width="1320" height="640" fill="#F8FBFF"/>
+<text x="42" y="48" class="t">Reliability Panel: Success Rate and p95 Runtime</text>
+<text x="42" y="74" class="s">Operational reliability from produced artifacts and workflow timestamps</text>
+<rect class="panel" x="90" y="130" width="540" height="420" rx="16"/>
+<rect class="panel" x="690" y="130" width="540" height="420" rx="16"/>
+<text x="130" y="190" class="l">Analysis Success Rate</text>
+<text x="130" y="250" class="t">100.0%</text>
+<text x="130" y="288" class="sm">Target: GE 95%</text>
+<text x="130" y="320" class="sm">Achieved files: 49</text>
+<text x="130" y="348" class="sm">Processed scans: 49</text>
+<text x="730" y="190" class="l">Workflow Runtime p95 (proxy)</text>
+<text x="730" y="250" class="t">1.73 s</text>
+<text x="730" y="288" class="sm">Target: LE 2.00 s</text>
+<text x="730" y="320" class="sm">Runtime samples: 30</text>
+<text x="730" y="348" class="sm">Derived from ingest to clinician signoff events</text>
+<text x="130" y="388" style="font:700 24px Segoe UI; fill:#16A34A">PASS</text>
+<text x="730" y="388" style="font:700 24px Segoe UI; fill:#16A34A">PASS</text>
+</svg>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1280" height="700"/>
+
+<text x="60" y="58" class="title">DICOM Workstation Coverage</text>
+<text x="60" y="88" class="subtitle">Viewer-plane support, modality coverage, and tool availability</text>
+
+<rect class="panel" x="70" y="120" width="360" height="230" rx="16"/>
+<text x="100" y="166" class="label">DICOM profiles</text>
+<text x="100" y="214" class="title" style="font-size:50px">49/49</text>
+<text x="100" y="252" class="small">Coverage across publication cohort</text>
+
+<rect class="panel" x="460" y="120" width="360" height="230" rx="16"/>
+<text x="490" y="166" class="label">Modality support</text>
+<text x="490" y="206" class="small">MRI_T1: 45</text>
+<text x="490" y="236" class="small">fMRI: 4</text>
+<text x="490" y="266" class="small">Dominant matrix: 512x512 (147 series)</text>
+
+<rect class="panel" x="850" y="120" width="360" height="230" rx="16"/>
+<text x="880" y="166" class="label">MPR plane availability</text>
+<text x="880" y="206" class="small">Axial: 49</text>
+<text x="880" y="236" class="small">Coronal: 49</text>
+<text x="880" y="266" class="small">Sagittal: 49</text>
+
+<rect class="panel" x="70" y="390" width="1140" height="240" rx="16"/>
+<text x="100" y="434" class="label">DICOM workstation toolset and scan navigation</text>
+<text x="100" y="468" class="small">Slice count range: 86 to 113 (mean 98.39)</text>
+<text x="100" y="500" class="small">Available tools (8): window_level, mpr_planes, slice_scrub, cine_loop, distance_measurement, crosshair, annotations, invert</text>
+<text x="100" y="536" class="small">Window presets + MPR + measurements + annotations available in all DICOM-profile rows</text>
+
+</svg>

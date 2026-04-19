@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1200" height="420"/>
+<text x="60" y="65" class="title">Comparison Table: Exemplar Cases</text>
+<text x="60" y="95" class="subtitle">High vs Moderate vs Low risk case profiles</text>
+<rect class="panel" x="60" y="140" width="1080" height="56" rx="10"/>
+<text x="74" y="176" class="label">Case</text>
+<text x="354" y="176" class="label">Risk</text>
+<text x="544" y="176" class="label">Triage</text>
+<text x="724" y="176" class="label">Flagged Volume (mm3)</text>
+<text x="944" y="176" class="label">Mean Confidence (%)</text>
+<rect x="60" y="196" width="1080" height="56" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="74" y="232" class="label">f5cfb886...</text>
+<text x="354" y="232" class="label">High</text>
+<text x="544" y="232" class="value">19.88</text>
+<text x="724" y="232" class="value">18130</text>
+<text x="944" y="232" class="value">90.00</text>
+<rect x="60" y="252" width="1080" height="56" fill="#F3F8FD" stroke="#D0D7E2"/>
+<text x="74" y="288" class="label">8d43d3ce...</text>
+<text x="354" y="288" class="label">Moderate</text>
+<text x="544" y="288" class="value">6.98</text>
+<text x="724" y="288" class="value">6855</text>
+<text x="944" y="288" class="value">90.00</text>
+<rect x="60" y="308" width="1080" height="56" fill="#FFFFFF" stroke="#D0D7E2"/>
+<text x="74" y="344" class="label">9fc2b355...</text>
+<text x="354" y="344" class="label">Low</text>
+<text x="544" y="344" class="value">2.34</text>
+<text x="724" y="344" class="value">1380</text>
+<text x="944" y="344" class="value">59.76</text>
+</svg>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="580" viewBox="0 0 1220 580">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1220" height="580"/>
+
+<text x="60" y="58" class="title">Final Cohort Flow for Publication</text>
+<text x="60" y="88" class="subtitle">Eligibility filtering from repository analysis outputs</text>
+
+<rect class="panel" x="80" y="130" width="300" height="180" rx="14"/>
+<text x="230" y="182" class="label" text-anchor="middle">Detected analysis files</text>
+<text x="230" y="234" class="title" text-anchor="middle" style="font-size:50px">71</text>
+
+<rect class="panel" x="460" y="130" width="300" height="180" rx="14"/>
+<text x="610" y="182" class="label" text-anchor="middle">Publication-eligible rows</text>
+<text x="610" y="234" class="title" text-anchor="middle" style="font-size:50px">49</text>
+
+<rect class="panel" x="840" y="130" width="300" height="180" rx="14"/>
+<text x="990" y="182" class="label" text-anchor="middle">Excluded rows</text>
+<text x="990" y="234" class="title" text-anchor="middle" style="font-size:50px">22</text>
+<text x="990" y="274" class="small" text-anchor="middle">scan_conf_metrics_only: 22</text>
+
+<line x1="380" y1="220" x2="460" y2="220" stroke="#2563EB" stroke-width="4"/>
+<polygon points="460,220 446,212 446,228" fill="#2563EB"/>
+<line x1="760" y1="220" x2="840" y2="220" stroke="#DC2626" stroke-width="4"/>
+<polygon points="840,220 826,212 826,228" fill="#DC2626"/>
+
+<rect class="panel" x="80" y="360" width="1060" height="170" rx="14"/>
+<text x="110" y="404" class="label">Cohort descriptor</text>
+<text x="110" y="440" class="small">MRI_T1: 45 | fMRI: 4 | Atlas AAL3: 49</text>
+<text x="110" y="468" class="small">Quality limited: 26 | fair: 23 | uploaded: 49</text>
+<text x="110" y="504" class="small">Duplicate scan IDs in included cohort: 0</text>
+
+</svg>

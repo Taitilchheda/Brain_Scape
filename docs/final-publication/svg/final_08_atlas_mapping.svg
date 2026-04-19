@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1280" height="660"/>
+<text x="60" y="56" class="title">Atlas Mapping Consistency</text>
+<text x="60" y="86" class="subtitle">AAL3 mapping coverage with severity GE 2 regional frequency</text>
+<rect class="panel" x="70" y="112" width="1140" height="110" rx="14"/>
+<text x="100" y="152" class="label">Atlas AAL3 mapped rows: 49/49</text>
+<text x="100" y="184" class="small">Regions present in all rows: 8</text>
+<rect x="290" y="250" width="640.0" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="277" class="label" text-anchor="end">Precentral_R</text>
+<text x="940.0" y="277" class="value">35</text>
+<text x="1130" y="277" class="small" text-anchor="end">mean burden 22.10%</text>
+<rect x="290" y="310" width="384.0" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="337" class="label" text-anchor="end">Hippocampus_R</text>
+<text x="684.0" y="337" class="value">21</text>
+<text x="1130" y="337" class="small" text-anchor="end">mean burden 28.61%</text>
+<rect x="290" y="370" width="347.4" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="397" class="label" text-anchor="end">Precentral_L</text>
+<text x="647.4" y="397" class="value">19</text>
+<text x="1130" y="397" class="small" text-anchor="end">mean burden 24.70%</text>
+<rect x="290" y="430" width="347.4" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="457" class="label" text-anchor="end">Hippocampus_L</text>
+<text x="647.4" y="457" class="value">19</text>
+<text x="1130" y="457" class="small" text-anchor="end">mean burden 26.37%</text>
+<rect x="290" y="490" width="347.4" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="517" class="label" text-anchor="end">Parietal_Inf_L</text>
+<text x="647.4" y="517" class="value">19</text>
+<text x="1130" y="517" class="small" text-anchor="end">mean burden 24.57%</text>
+<rect x="290" y="550" width="310.9" height="42" rx="8" fill="#2563EB"/>
+<text x="276" y="577" class="label" text-anchor="end">Temporal_Mid_L</text>
+<text x="610.9" y="577" class="value">17</text>
+<text x="1130" y="577" class="small" text-anchor="end">mean burden 23.50%</text>
+</svg>

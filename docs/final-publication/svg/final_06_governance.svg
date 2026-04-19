@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="620" viewBox="0 0 1240 620">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 600 20px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .label { font: 600 17px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .value { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .small { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #4B5563; }
+      .panel { fill: #E7F1FB; stroke: #1F2937; stroke-width: 1.6; }
+      .axis { stroke: #6B7280; stroke-width: 1.4; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+<rect class="bg" x="0" y="0" width="1240" height="620"/>
+
+<text x="60" y="56" class="title">Final Governance and Audit Panel</text>
+<text x="60" y="86" class="subtitle">Authorization outcomes and audit completeness</text>
+
+<rect class="panel" x="80" y="120" width="520" height="430" rx="16"/>
+<text x="110" y="164" class="label">Outcome split</text>
+<rect x="150" y="190" width="160" height="25.1" fill="#DC2626"/>
+<rect x="150" y="215.1" width="160" height="334.9" fill="#16A34A"/>
+<rect x="150" y="190" width="160" height="360" fill="none" stroke="#334155"/>
+<text x="340" y="280" class="label">Allowed: 400</text>
+<text x="340" y="314" class="label">Denied: 30</text>
+<text x="340" y="350" class="small">Total events: 430</text>
+<text x="340" y="384" class="small">Unique users: 10</text>
+<text x="340" y="414" class="small">Unique actions: 31</text>
+
+<rect class="panel" x="650" y="120" width="520" height="430" rx="16"/>
+<text x="680" y="164" class="label">Audit quality</text>
+<circle cx="900" cy="340" r="120" fill="none" stroke="#D1D5DB" stroke-width="32"/>
+<circle cx="900" cy="340" r="120" fill="none" stroke="#0D9488" stroke-width="32" stroke-dasharray="754.0 753.98" transform="rotate(-90 900 340)"/>
+<text x="900" y="338" class="title" text-anchor="middle" style="font-size:44px">100.0%</text>
+<text x="900" y="372" class="small" text-anchor="middle">audit completeness</text>
+<text x="680" y="468" class="small">Denied reason: role_not_allowed = 30</text>
+
+</svg>

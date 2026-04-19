@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="700" viewBox="0 0 1120 700">
+
+    <style>
+      .bg { fill: #F8FBFF; }
+      .panel { fill: #E8F2FB; stroke: #1F2A37; stroke-width: 2; }
+      .title { font: 700 34px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .subtitle { font: 600 22px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .label { font: 600 18px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .small { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #556070; }
+      .value { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #101418; }
+      .axis { stroke: #6B7280; stroke-width: 1.5; }
+      .grid { stroke: #D1D5DB; stroke-width: 1; stroke-dasharray: 4 4; }
+    </style>
+    
+
+<rect class="bg" x="0" y="0" width="1120" height="700"/>
+<text x="70" y="65" class="title">Chart: Risk Band Distribution</text>
+<text x="70" y="95" class="subtitle">Counts and percentages by assigned risk band</text>
+<line x1="110" y1="630.0" x2="1010" y2="630.0" class="grid"/>
+<text x="82" y="635.0" class="small" text-anchor="end">0</text>
+<line x1="110" y1="530.0" x2="1010" y2="530.0" class="grid"/>
+<text x="82" y="535.0" class="small" text-anchor="end">5</text>
+<line x1="110" y1="430.0" x2="1010" y2="430.0" class="grid"/>
+<text x="82" y="435.0" class="small" text-anchor="end">10</text>
+<line x1="110" y1="330.0" x2="1010" y2="330.0" class="grid"/>
+<text x="82" y="335.0" class="small" text-anchor="end">15</text>
+<line x1="110" y1="230.0" x2="1010" y2="230.0" class="grid"/>
+<text x="82" y="235.0" class="small" text-anchor="end">20</text>
+<line x1="110" y1="130.0" x2="1010" y2="130.0" class="grid"/>
+<text x="82" y="135.0" class="small" text-anchor="end">25</text>
+<line x1="110" y1="130" x2="110" y2="630" class="axis"/>
+<line x1="110" y1="630" x2="1010" y2="630" class="axis"/>
+<rect x="230" y="170.0" width="180" height="460.0" rx="10" fill="#E74C3C"/>
+<text x="320.0" y="160.0" class="value" text-anchor="middle">23</text>
+<text x="320.0" y="194.0" class="small" text-anchor="middle">46.94%</text>
+<text x="320.0" y="664" class="label" text-anchor="middle">High</text>
+<rect x="530" y="550.0" width="180" height="80.0" rx="10" fill="#F39C12"/>
+<text x="620.0" y="540.0" class="value" text-anchor="middle">4</text>
+<text x="620.0" y="574.0" class="small" text-anchor="middle">8.16%</text>
+<text x="620.0" y="664" class="label" text-anchor="middle">Moderate</text>
+<rect x="830" y="190.0" width="180" height="440.0" rx="10" fill="#27AE60"/>
+<text x="920.0" y="180.0" class="value" text-anchor="middle">22</text>
+<text x="920.0" y="214.0" class="small" text-anchor="middle">44.90%</text>
+<text x="920.0" y="664" class="label" text-anchor="middle">Low</text>
+</svg>

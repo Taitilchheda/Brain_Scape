@@ -1,0 +1,196 @@
+{
+  "run_date": "2026-04-19",
+  "paths": {
+    "analysis": "outputs/analysis",
+    "audit": "logs/audit"
+  },
+  "cohort_flow": {
+    "total_analysis_files": 71,
+    "included_publication_rows": 49,
+    "excluded_rows": 22,
+    "excluded_schema_counts": {
+      "scan_conf_metrics_only": 22
+    },
+    "included_scan_id_duplicates": 0
+  },
+  "cohort_descriptor": {
+    "modality_counts": {
+      "MRI_T1": 45,
+      "fMRI": 4
+    },
+    "atlas_counts": {
+      "AAL3": 49
+    },
+    "scan_quality_counts": {
+      "limited": 26,
+      "fair": 23
+    },
+    "provenance_counts": {
+      "uploaded": 49
+    }
+  },
+  "core_metrics": {
+    "overall_confidence": {
+      "mean": 0.722877551020408,
+      "ci95": [
+        0.7151224489795917,
+        0.7291632653061223
+      ]
+    },
+    "triage_score": {
+      "mean": 8.190612244897958,
+      "ci95": [
+        6.564081632653058,
+        9.909795918367344
+      ]
+    },
+    "flagged_regions": {
+      "mean": 3.122448979591837,
+      "ci95": [
+        2.510204081632653,
+        3.7755102040816326
+      ]
+    },
+    "severe_regions": {
+      "mean": 1.0612244897959184,
+      "ci95": [
+        0.6938775510204082,
+        1.4489795918367347
+      ]
+    },
+    "flagged_volume_mm3": {
+      "mean": 6939.2040816326535,
+      "ci95": [
+        5310.693877551021,
+        8662.102040816326
+      ]
+    },
+    "severe_volume_mm3": {
+      "mean": 3113.5714285714284,
+      "ci95": [
+        2016.8979591836735,
+        4308.918367346939
+      ]
+    },
+    "mean_region_confidence_pct": {
+      "mean": 78.41591836734692,
+      "ci95": [
+        74.60448979591834,
+        81.84795918367344
+      ]
+    },
+    "highest_region_burden_pct": {
+      "mean": 25.38979591836734,
+      "ci95": [
+        23.606122448979573,
+        27.210204081632643
+      ]
+    }
+  },
+  "risk_distribution": {
+    "high": {
+      "count": 23,
+      "percent": 46.93877551020408,
+      "ci95_percent": [
+        33.703281897894776,
+        60.61937298008014
+      ]
+    },
+    "moderate": {
+      "count": 4,
+      "percent": 8.16326530612245,
+      "ci95_percent": [
+        3.2202296241712225,
+        19.189387041486135
+      ]
+    },
+    "low": {
+      "count": 22,
+      "percent": 44.89795918367347,
+      "ci95_percent": [
+        31.85262492963633,
+        58.68513320032188
+      ]
+    }
+  },
+  "severity_distribution": {
+    "ORANGE": {
+      "count": 34,
+      "percent": 8.673469387755102
+    },
+    "GREEN": {
+      "count": 80,
+      "percent": 20.408163265306122
+    },
+    "RED": {
+      "count": 52,
+      "percent": 13.26530612244898
+    },
+    "YELLOW": {
+      "count": 67,
+      "percent": 17.091836734693878
+    },
+    "BLUE": {
+      "count": 159,
+      "percent": 40.56122448979592
+    }
+  },
+  "top_regions_severity_ge_2": [
+    {
+      "region": "Precentral_R",
+      "frequency": 35,
+      "mean_burden_pct": 22.10285714285714,
+      "mean_volume_mm3": 1525.7142857142858
+    },
+    {
+      "region": "Hippocampus_R",
+      "frequency": 21,
+      "mean_burden_pct": 28.609523809523814,
+      "mean_volume_mm3": 1865.7142857142858
+    },
+    {
+      "region": "Precentral_L",
+      "frequency": 19,
+      "mean_burden_pct": 24.699999999999992,
+      "mean_volume_mm3": 4787.631578947368
+    },
+    {
+      "region": "Hippocampus_L",
+      "frequency": 19,
+      "mean_burden_pct": 26.373684210526324,
+      "mean_volume_mm3": 2662.684210526316
+    },
+    {
+      "region": "Parietal_Inf_L",
+      "frequency": 19,
+      "mean_burden_pct": 24.568421052631578,
+      "mean_volume_mm3": 1616.842105263158
+    },
+    {
+      "region": "Temporal_Mid_L",
+      "frequency": 17,
+      "mean_burden_pct": 23.500000000000004,
+      "mean_volume_mm3": 1609.4117647058824
+    }
+  ],
+  "audit": {
+    "total_events": 430,
+    "allowed": 400,
+    "denied": 30,
+    "unique_users": 10,
+    "unique_actions": 31,
+    "denied_reason_counts": {
+      "role_not_allowed": 30
+    },
+    "completeness": 1.0
+  },
+  "qc": {
+    "issue_count": 0,
+    "issues_preview": []
+  },
+  "methods": {
+    "core_metric_ci": "bootstrap_5000",
+    "risk_ci": "wilson_95",
+    "note": "Rows missing select derived metric fields were backfilled deterministically from damage_summary."
+  }
+}
