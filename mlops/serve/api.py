@@ -1054,7 +1054,20 @@ async def get_report(
         report_mode_notice,
         critical_findings,
     )
+    summary = (
+        f"{risk_band.title()} risk profile with "
+        f"{quantitative_metrics.get('flagged_regions', 0)} flagged region(s), "
+        f"{quantitative_metrics.get('severe_regions', 0)} severe region(s), and "
+        f"triage score {quantitative_metrics.get('triage_score', 0)}."
+    )
+    if quantitative_metrics.get("largest_region_name"):
+        summary += (
+            f" Largest burden in {quantitative_metrics.get('largest_region_name')} "
+            f"({quantitative_metrics.get('largest_region_volume_mm3', 0)} mm3)."
+        )
+
     report_sections = {
+        "summary": summary,
         "impression": decorated.get("executive_summary") or "No executive summary available.",
         "largest_region": {
             "name": quantitative_metrics.get("largest_region_name"),
@@ -1080,18 +1093,6 @@ async def get_report(
         finding_rows,
         critical_findings,
     )
-
-    summary = (
-        f"{risk_band.title()} risk profile with "
-        f"{quantitative_metrics.get('flagged_regions', 0)} flagged region(s), "
-        f"{quantitative_metrics.get('severe_regions', 0)} severe region(s), and "
-        f"triage score {quantitative_metrics.get('triage_score', 0)}."
-    )
-    if quantitative_metrics.get("largest_region_name"):
-        summary += (
-            f" Largest burden in {quantitative_metrics.get('largest_region_name')} "
-            f"({quantitative_metrics.get('largest_region_volume_mm3', 0)} mm3)."
-        )
 
     return {
         "scan_id": scan_id,
@@ -2266,7 +2267,7 @@ def _ensure_report_pdf(
         elements.append(Spacer(1, 15))
 
         elements.append(Paragraph("Summary", styles["Heading2"]))
-        elements.append(Paragraph(str(neurology_standard_sections.get("structured_summary", "n/a")), styles["Normal"]))
+        elements.append(Paragraph(str(report_sections.get("summary", "n/a")), styles["Normal"]))
         elements.append(Paragraph(str(report_mode_notice), styles["Normal"]))
         elements.append(Spacer(1, 10))
 
