@@ -8,8 +8,8 @@
         const SURFACE_MESH_QUALITY = "extreme";
         const VOLUME_RENDER_RESOLUTION = "extreme";
         const DICOM_VOLUME_RESOLUTION = "extreme";
-        const DICOM_TARGET_RENDER_EDGE = 1408;
-        const DICOM_MAX_RENDER_EDGE = 2048;
+        const DICOM_TARGET_RENDER_EDGE = 1024;
+        const DICOM_MAX_RENDER_EDGE = 1280;
         const CURRENT_ROUTE_PATH = String(window.location?.pathname || "").toLowerCase();
         const IS_FULLSCREEN_VIEWER_ROUTE = CURRENT_ROUTE_PATH.startsWith("/viewer/fullscreen");
         const CURRENT_ROUTE_QUERY = new URLSearchParams(window.location?.search || "");
@@ -3623,53 +3623,6 @@
             return mask;
         }
 
-        function buildLesionMaskFromDamageChannel(volume) {
-            const damage = volume?.damageData;
-            if (!(damage instanceof Uint8Array) || damage.length === 0) {
-                return null;
-            }
-
-            let maxDamage = 0;
-            let nonZero = 0;
-            for (let i = 0; i < damage.length; i++) {
-                const value = damage[i];
-                if (value > 0) {
-                    nonZero += 1;
-                    if (value > maxDamage) maxDamage = value;
-                }
-            }
-
-            if (nonZero < 12 || maxDamage < 20) {
-                return null;
-            }
-
-            let threshold = Math.max(18, Math.min(200, Math.round(maxDamage * 0.38)));
-            const mask = new Uint8Array(damage.length);
-            let lesionCount = 0;
-
-            for (let i = 0; i < damage.length; i++) {
-                if (damage[i] >= threshold) {
-                    mask[i] = 1;
-                    lesionCount += 1;
-                }
-            }
-
-            if (lesionCount < 24 && maxDamage >= 28) {
-                threshold = Math.max(12, Math.round(maxDamage * 0.25));
-                lesionCount = 0;
-                for (let i = 0; i < damage.length; i++) {
-                    if (damage[i] >= threshold) {
-                        mask[i] = 1;
-                        lesionCount += 1;
-                    } else {
-                        mask[i] = 0;
-                    }
-                }
-            }
-
-            return lesionCount >= 12 ? mask : null;
-        }
-
         function buildUncertaintyMask(volume, lesionMask, edemaMask) {
             const uncertainty = new Uint8Array(volume.width * volume.height * volume.depth);
 
@@ -3730,8 +3683,7 @@
 
             if (!shouldRebuild) return;
 
-            const lesionMask = buildLesionMaskFromDamageChannel(activeDicomVolume)
-                || buildAutoLesionMask(data, activeDicomVolume);
+            const lesionMask = buildAutoLesionMask(data, activeDicomVolume);
             const edemaMask = createDilatedMask(lesionMask, activeDicomVolume, 2) || new Uint8Array(expectedLength);
             const uncertaintyMask = buildUncertaintyMask(activeDicomVolume, lesionMask, edemaMask);
 
@@ -4177,7 +4129,6 @@
             }
 
             const values = new Uint8Array(voxelCount);
-            const damage = new Uint8Array(voxelCount);
             const histogram = new Uint32Array(256);
             let nonZeroSamples = 0;
 
@@ -4185,12 +4136,10 @@
                 const intensity = packed[p];
                 const grayMatter = packed[p + 1];
                 const whiteMatter = packed[p + 2];
-                const damageAlpha = packed[p + 3];
 
                 // Blend structural channels for better workstation-style contrast.
                 const composite = Math.max(intensity, Math.round((grayMatter * 0.58) + (whiteMatter * 0.42)));
                 values[i] = composite;
-                damage[i] = damageAlpha;
 
                 if (composite > 0) {
                     histogram[composite] += 1;
@@ -4215,15 +4164,12 @@
                 height,
                 depth,
                 data: values,
-                damageData: damage,
                 pixelSpacing,
                 sliceThickness,
                 windowWidth,
                 windowCenter,
                 syntheticFallback: Boolean(volumePayload?.synthetic_fallback),
                 resolutionProfile: String(volumePayload?.resolution_profile || "standard"),
-                damageSource: String(volumePayload?.damage_source || "analysis_damage_summary"),
-                damageSourcePath: String(volumePayload?.damage_source_path || ""),
             };
         }
 
@@ -4273,10 +4219,8 @@
                 height,
                 depth,
                 data: values,
-                damageData: null,
                 pixelSpacing,
                 sliceThickness,
-                damageSource: "local_synthetic",
             };
         }
 
@@ -4423,10 +4367,9 @@
         function computeDicomRenderDimensions(frame) {
             const largestEdge = Math.max(frame.width, frame.height, 1);
             const baseScale = Math.max(1, Math.floor(DICOM_TARGET_RENDER_EDGE / largestEdge));
-            const pixelRatioBoost = Math.max(1, Math.min(2, Number(window.devicePixelRatio || 1)));
 
-            const rawWidth = frame.width * baseScale * pixelRatioBoost;
-            const rawHeight = frame.height * baseScale * pixelRatioBoost;
+            const rawWidth = frame.width * baseScale;
+            const rawHeight = frame.height * baseScale;
             const limiter = Math.max(rawWidth / DICOM_MAX_RENDER_EDGE, rawHeight / DICOM_MAX_RENDER_EDGE, 1);
 
             return {
@@ -4823,26 +4766,15 @@
         async function rebuildDicomVolume(dataOverride = null) {
             const sourceData = dataOverride || analysisData;
             if (!sourceData) {
-                return {
-                    sourceLabel: "unavailable",
-                    resolutionProfile: "unavailable",
-                    dimensions: [0, 0, 0],
-                    mappingSource: "unavailable",
-                };
+                return { sourceLabel: "unavailable", resolutionProfile: "unavailable", dimensions: [0, 0, 0] };
             }
             const series = getActiveDicomSeries();
             if (!series) {
-                return {
-                    sourceLabel: "unavailable",
-                    resolutionProfile: "unavailable",
-                    dimensions: [0, 0, 0],
-                    mappingSource: "unavailable",
-                };
+                return { sourceLabel: "unavailable", resolutionProfile: "unavailable", dimensions: [0, 0, 0] };
             }
 
             let sourceLabel = "native volume";
             let resolutionProfile = DICOM_VOLUME_RESOLUTION;
-            let mappingSource = "region-prior mapping";
             try {
                 const volumePayload = await fetchVolumePayload(sourceData.scan_id, DICOM_VOLUME_RESOLUTION);
                 activeDicomVolume = buildDicomVolumeFromPayload(volumePayload, series);
@@ -4850,19 +4782,11 @@
                 if (activeDicomVolume.syntheticFallback) {
                     sourceLabel = "backend synthetic fallback";
                 }
-                if (activeDicomVolume.damageSource === "severity_map") {
-                    mappingSource = "voxel severity map";
-                } else if (activeDicomVolume.damageSource === "analysis_damage_summary") {
-                    mappingSource = "region-prior mapping";
-                } else {
-                    mappingSource = String(activeDicomVolume.damageSource || "unknown mapping");
-                }
             } catch (error) {
                 console.warn("DICOM workstation falling back to synthetic local volume:", error);
                 activeDicomVolume = buildSyntheticDicomVolume(sourceData, series);
                 sourceLabel = "local synthetic fallback";
                 resolutionProfile = "local-fallback";
-                mappingSource = "local synthetic mapping";
             }
 
             dicomState.plane = String(series.plane || dicomState.plane || "axial").toLowerCase();
@@ -4892,7 +4816,6 @@
                 sourceLabel,
                 resolutionProfile,
                 dimensions: [activeDicomVolume.width, activeDicomVolume.height, activeDicomVolume.depth],
-                mappingSource,
             };
         }
 
@@ -5060,28 +4983,12 @@
             updateClinicalWorkflow();
 
             try {
-                const encodedScanId = encodeURIComponent(data.scan_id);
-                let payload = null;
-
-                if (authToken) {
-                    try {
-                        const secureResponse = await fetchWithAuthRetry(`${API_BASE}/dicom/${encodedScanId}`, {}, "clinician");
-                        if (secureResponse.ok) {
-                            payload = await secureResponse.json();
-                        }
-                    } catch (secureError) {
-                        console.warn("Authenticated DICOM metadata unavailable, falling back to demo metadata:", secureError);
-                    }
+                const response = await fetch(`${API_BASE}/demo/dicom/${encodeURIComponent(data.scan_id)}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
-                if (!payload) {
-                    const demoResponse = await fetch(`${API_BASE}/demo/dicom/${encodedScanId}`);
-                    if (!demoResponse.ok) {
-                        throw new Error(`HTTP ${demoResponse.status}`);
-                    }
-                    payload = await demoResponse.json();
-                }
-
+                const payload = await response.json();
                 activeDicomStudy = payload;
 
                 configureDicomSeriesOptions(payload);
@@ -5133,7 +5040,6 @@
                 const [dx, dy, dz] = volumeSource.dimensions || [0, 0, 0];
                 setDicomReadout(
                     `${sourceMessage} Resolution profile: ${volumeSource.resolutionProfile}. ` +
-                    `Damage mapping: ${volumeSource.mappingSource}. ` +
                     `Volume: ${dx}x${dy}x${dz}. ${dicomMeasurementInstruction(dicomState.measureTool, false)}`
                 );
                 updateClinicalWorkflow();
@@ -5342,9 +5248,12 @@
                 updateClinicalWorkflow();
 
                 if (IS_FULLSCREEN_VIEWER_ROUTE && !currentScanId && !ROUTE_SCAN_ID) {
-                    const preferredPatient = ROUTE_PATIENT_ID && findPatientById(ROUTE_PATIENT_ID)
-                        ? ROUTE_PATIENT_ID
-                        : selectedPatientId;
+                    // Always use the exact patient_id 'taitil' if present
+                    let taitilPatient = demoPatients.find(
+                        (p) => p.patient_id === "taitil"
+                    );
+                    let preferredPatient = taitilPatient?.patient_id
+                        || (ROUTE_PATIENT_ID && findPatientById(ROUTE_PATIENT_ID) ? ROUTE_PATIENT_ID : selectedPatientId);
                     if (preferredPatient && preferredPatient !== selectedPatientId) {
                         setSelectedPatient(preferredPatient);
                     }
@@ -5786,32 +5695,24 @@
             if (resolvedPatientId) {
                 setSelectedPatient(resolvedPatientId);
             }
-
-            const selectedPatient = resolvedPatientId ? findPatientById(resolvedPatientId) : null;
-            const patientPreferredScanId = String(selectedPatient?.latest_scan_id || "").trim();
-            const effectiveScanId = resolvedScanId || patientPreferredScanId;
-            const usesDemoFlow = !effectiveScanId || String(effectiveScanId).startsWith("demo-scan");
-
             const queryParams = new URLSearchParams();
-            if (usesDemoFlow) {
-                if (effectiveScanId) {
-                    queryParams.set("scan_id", effectiveScanId);
-                } else if (resolvedPatientId) {
-                    queryParams.set("patient_id", resolvedPatientId);
-                }
+            if (resolvedScanId) {
+                queryParams.set("scan_id", resolvedScanId);
+            } else if (resolvedPatientId) {
+                queryParams.set("patient_id", resolvedPatientId);
             }
             const patientQuery = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-            updateStatus(effectiveScanId ? `Loading scan ${effectiveScanId}...` : "Loading selected demo scan...");
-            updateJobInfo(effectiveScanId || resolvedPatientId || "demo");
+            updateStatus(resolvedScanId ? `Loading scan ${resolvedScanId}...` : "Loading selected demo scan...");
+            updateJobInfo(resolvedScanId || resolvedPatientId || "demo");
             setLoaderState({ active: false, progress: 0, stage: "idle", etaSeconds: null });
 
             try {
                 let loadedFromDirectScan = false;
-                if (effectiveScanId) {
+                if (resolvedScanId) {
                     try {
                         const analysisResp = await fetchWithAuthRetry(
-                            `${API_BASE}/analysis/${encodeURIComponent(effectiveScanId)}`,
+                            `${API_BASE}/analysis/${encodeURIComponent(resolvedScanId)}`,
                             {},
                             "clinician"
                         );
@@ -5821,10 +5722,10 @@
                         analysisData = await analysisResp.json();
                         loadedFromDirectScan = true;
                     } catch (scanLookupError) {
-                        if (!usesDemoFlow || !resolvedPatientId) {
+                        if (!resolvedPatientId) {
                             throw scanLookupError;
                         }
-                        updateStatus(`Scan ${effectiveScanId} is unavailable. Loading the selected patient demo instead...`);
+                        updateStatus(`Scan ${resolvedScanId} is unavailable. Loading the selected patient demo instead...`);
                     }
                 }
 

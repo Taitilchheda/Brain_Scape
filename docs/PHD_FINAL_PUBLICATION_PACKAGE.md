@@ -96,33 +96,3 @@ Mermaid files:
 ## 10. Regeneration
 1. Run tools/compute_publication_validation.py to refresh validated metrics.
 2. Run tools/generate_final_publication_assets.py to refresh this package and all diagrams.
-
-## 11. Actual Reconstruction and DICOM Visuals
-These are real image renders (not metric-only charts) generated from exported mesh data and paired analysis metadata.
-
-Case folders:
-- docs/final-publication/cases/README.md
-- docs/final-publication/cases/088b7515-bcfb-441c-85d0-f0e24f2f7300/README.md
-- docs/final-publication/cases/4b11d116-1e3e-4bef-a077-01f06d462523/README.md
-
-Gallery:
-- docs/final-publication/ACTUAL_RECON_DICOM_GALLERY.md
-
-Generation command:
-- tools/generate_actual_reconstruction_images.py
-
-## 12. Perfect Brain Showcase
-This dedicated folder provides a clean, publication-style "perfect brain" presentation with hotspot overlays and MRI-style DICOM panels.
-
-Anatomical source:
-- fsaverage human cortical template surfaces (left and right pial meshes)
-
-Showcase files:
-- docs/final-publication/perfect-brain-showcase/README.md
-- docs/final-publication/perfect-brain-showcase/perfect_brain_surface.png
-- docs/final-publication/perfect-brain-showcase/perfect_brain_hotspots.png
-- docs/final-publication/perfect-brain-showcase/dicom_mri_series.png
-- docs/final-publication/perfect-brain-showcase/dicom_mri_hotspots.png
-
-Generation command:
-- tools/generate_perfect_brain_showcase.py

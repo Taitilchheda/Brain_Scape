@@ -2,10 +2,6 @@
 
 This folder contains SVG-only visuals for the Results section.
 
-Publication note:
-- Use `docs/PHD_PUBLICATION_VALIDATION.md` and `docs/publication_metrics_latest.json` as the authoritative numeric source for manuscript submission.
-- Core tables/charts in this folder are synchronized to that validated cohort snapshot (generated 2026-04-19).
-
 ## Files
 - results_table_core_metrics.svg
 - results_chart_risk_distribution.svg
@@ -23,11 +19,3 @@ Publication note:
 - eval_reliability_success_p95.svg
 - eval_governance_allowed_denied_completeness.svg
 - eval_results_validation_dashboard.svg
-
-## Mermaid Sources
-- mmd/eval_metric_table_target_vs_achieved.mmd
-- mmd/eval_calibration_ece_summary.mmd
-- mmd/eval_agreement_clinician_benchmark.mmd
-- mmd/eval_reliability_success_p95.mmd
-- mmd/eval_governance_allowed_denied_completeness.mmd
-- mmd/eval_results_validation_dashboard.mmd

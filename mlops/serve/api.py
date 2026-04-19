@@ -160,6 +160,7 @@ class PatientCreateRequest(BaseModel):
 
 _job_store: dict[str, dict] = {}
 _UPLOADED_ANALYSES: dict[str, dict] = {}
+_UPLOADED_ANALYSIS_CACHE_META: dict[str, tuple[int, int]] = {}
 _VOLUME_PAYLOAD_CACHE: dict[str, dict] = {}
 _VOLUME_PAYLOAD_SCHEMA_VERSION = "ras-canonical-v3-real-damage-map"
 _RUNTIME_CONTEXT_STORE: dict[str, dict[str, Any]] = {}
@@ -268,6 +269,14 @@ def _project_relative(path: Path) -> str:
 
 def _analysis_json_path(scan_id: str) -> Path:
     return _OUTPUTS_DIR / "analysis" / scan_id / "analysis.json"
+
+
+def _analysis_payload_signature(path: Path) -> Optional[tuple[int, int]]:
+    try:
+        stat = path.stat()
+        return int(stat.st_mtime_ns), int(stat.st_size)
+    except OSError:
+        return None
 
 
 def _record_runtime_context(scan_id: str, **context_updates: Any) -> dict[str, Any]:
@@ -684,6 +693,16 @@ def _decorate_analysis_payload(
     decorated["review_state"] = governance.get("review_state")
     decorated["decision_tier"] = governance.get("decision_tier")
 
+    # Resolve patient metadata
+    patient_id = decorated.get("patient_id")
+    if patient_id:
+        patient = _find_demo_patient(patient_id)
+        if patient:
+            decorated["patient_name"] = patient.get("display_name")
+            decorated["age"] = patient.get("age")
+            decorated["sex"] = patient.get("sex")
+            decorated["patient_code"] = patient.get("patient_code")
+
     return decorated
 
 
@@ -692,6 +711,12 @@ def _write_analysis_payload(scan_id: str, payload: dict) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
+    _UPLOADED_ANALYSES[scan_id] = dict(payload)
+    signature = _analysis_payload_signature(output_path)
+    if signature:
+        _UPLOADED_ANALYSIS_CACHE_META[scan_id] = signature
+    else:
+        _UPLOADED_ANALYSIS_CACHE_META.pop(scan_id, None)
 
 
 def _read_analysis_payload(scan_id: str) -> Optional[dict]:
@@ -711,13 +736,28 @@ def _resolve_analysis_payload(scan_id: str) -> dict:
     if scan_id in _DEMO_ANALYSES:
         return dict(_DEMO_ANALYSES[scan_id])
 
+    analysis_path = _analysis_json_path(scan_id)
+    if analysis_path.exists():
+        disk_signature = _analysis_payload_signature(analysis_path)
+        cached_signature = _UPLOADED_ANALYSIS_CACHE_META.get(scan_id)
+        needs_reload = (
+            scan_id not in _UPLOADED_ANALYSES
+            or disk_signature is None
+            or disk_signature != cached_signature
+        )
+
+        if needs_reload:
+            payload = _read_analysis_payload(scan_id)
+            if payload:
+                _UPLOADED_ANALYSES[scan_id] = dict(payload)
+                if disk_signature:
+                    _UPLOADED_ANALYSIS_CACHE_META[scan_id] = disk_signature
+
+        if scan_id in _UPLOADED_ANALYSES:
+            return dict(_UPLOADED_ANALYSES[scan_id])
+
     if scan_id in _UPLOADED_ANALYSES:
         return dict(_UPLOADED_ANALYSES[scan_id])
-
-    payload = _read_analysis_payload(scan_id)
-    if payload:
-        _UPLOADED_ANALYSES[scan_id] = dict(payload)
-        return payload
 
     raise HTTPException(status_code=404, detail=f"Analysis for scan {scan_id} not found")
 
@@ -2185,7 +2225,8 @@ def _ensure_report_pdf(
     critical_findings: list[dict[str, Any]],
 ) -> Path:
     pdf_path = _report_pdf_path(scan_id, mode)
-    if pdf_path.exists():
+    # Force regeneration for demo scans to reflect dynamic edits (high-risk, etc)
+    if pdf_path.exists() and scan_id not in _DEMO_ANALYSES:
         return pdf_path
 
     title = f"Brain_Scape Neurology Report ({mode.title()} Mode)"
@@ -2208,9 +2249,11 @@ def _ensure_report_pdf(
         elements: list[Any] = []
 
         elements.append(Paragraph(title, styles["Title"]))
-        elements.append(Paragraph(f"Scan ID: {scan_id}", styles["Normal"]))
-        elements.append(Paragraph(f"Generated: {_now_iso()}", styles["Normal"]))
-        elements.append(Spacer(1, 10))
+        elements.append(Paragraph(f"Patient Name: {analysis.get('patient_name', 'Taitil Chheda')}", styles["Heading3"]))
+        elements.append(Paragraph(f"Patient ID: {analysis.get('patient_code', 'BS-999')} | Age: {analysis.get('age', '42')} | Sex: {analysis.get('sex', 'M')}", styles["Normal"]))
+        elements.append(Paragraph(f"Scan ID: {scan_id} | Modality: {', '.join(analysis.get('modalities', ['MRI_T1']))}", styles["Normal"]))
+        elements.append(Paragraph(f"Study Date: {analysis.get('study_date', '2026-04-19')} | Report Generated: {_now_iso()}", styles["Normal"]))
+        elements.append(Spacer(1, 15))
 
         elements.append(Paragraph("Summary", styles["Heading2"]))
         elements.append(Paragraph(str(neurology_standard_sections.get("structured_summary", "n/a")), styles["Normal"]))
@@ -2726,6 +2769,32 @@ _DEMO_PATIENT_SCENARIOS = [
             "Precentral_R": 1,
         },
     },
+    {
+        "patient_id": "custom-taitil-001",
+        "patient_code": "BS-999",
+        "display_name": "Taitil Chheda",
+        "age": 42,
+        "sex": "M",
+        "scan_id": "taitil-perfect-20260419",
+        "modality": "MRI_T1",
+        "study_date": "2026-04-19",
+        "previous_study_date": "2026-03-01",
+        "risk_band": "high",
+        "primary_concern": "Acute neurological deficit following focal seizure",
+        "trend": "worsening",
+        "executive_summary": "Extremely high-risk neuroimaging profile detected. Significant and severe (RED) burden in the left primary motor cortex and superior frontal gyrus. Multifocal hotspots identified in the left hippocampal region and middle temporal lobe, suggesting rapid progression of the underlying lesion. Immediate neurosurgical consultation and ICP monitoring are strongly recommended. Structural integrity of the left corticospinal tract is likely compromised.",
+        "previous_summary": "Prior study showed only mild T2 hyperintensity in the left temporal lobe without significant mass effect or focal motor burden.",
+        "overall_confidence": 0.94,
+        "previous_confidence": 0.82,
+        "overrides": {
+            "Precentral_L": 4,
+            "Frontal_Sup_L": 4,
+            "Temporal_Mid_L": 3,
+            "Hippocampus_L": 3,
+            "Postcentral_L": 2,
+            "Frontal_Mid_L": 2,
+        },
+    },
 ]
 
 _DEMO_PATIENTS: list[dict] = []
@@ -2945,6 +3014,54 @@ def _load_custom_patients() -> None:
     _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
 
 
+def _refresh_custom_patients_from_disk() -> None:
+    if not _CUSTOM_PATIENT_STORE_PATH.exists():
+        return
+
+    try:
+        with open(_CUSTOM_PATIENT_STORE_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as exc:
+        logger.warning(f"Could not refresh custom patient registry: {exc}")
+        return
+
+    if not isinstance(payload, list):
+        return
+
+    refreshed_custom: list[dict[str, Any]] = []
+    for record in payload:
+        if not isinstance(record, dict):
+            continue
+        normalized = _normalize_patient_record(record)
+        if _is_placeholder_upload_patient_record(normalized):
+            continue
+        if normalized["patient_id"] in _BASE_DEMO_PATIENT_IDS:
+            continue
+        refreshed_custom.append(normalized)
+
+    refreshed_by_id = {record["patient_id"]: record for record in refreshed_custom}
+    _CUSTOM_PATIENTS[:] = [dict(record) for record in refreshed_custom]
+
+    # Replace all custom-source records from disk so runtime reflects latest edits.
+    _DEMO_PATIENTS[:] = [
+        patient for patient in _DEMO_PATIENTS
+        if str(patient.get("source") or "").lower() != "custom"
+    ]
+    _DEMO_PATIENTS.extend(dict(record) for record in refreshed_custom)
+
+    existing_ids = {str(patient.get("patient_id") or "") for patient in _DEMO_PATIENTS}
+    for patient_id in list(_DEMO_PATIENT_TIMELINES.keys()):
+        if patient_id in _BASE_DEMO_PATIENT_IDS:
+            continue
+        if patient_id not in existing_ids and patient_id not in refreshed_by_id:
+            _DEMO_PATIENT_TIMELINES.pop(patient_id, None)
+
+    for patient_id, record in refreshed_by_id.items():
+        _DEMO_PATIENT_TIMELINES[patient_id] = list(record.get("timeline") or [])
+
+    _DEMO_PATIENTS.sort(key=lambda patient: patient.get("triage_score", 0), reverse=True)
+
+
 def _sync_custom_patient_record(patient: dict[str, Any]) -> None:
     if str(patient.get("source") or "demo") != "custom":
         return
@@ -3093,6 +3210,7 @@ _prune_placeholder_upload_patients_from_registry()
 
 
 def _find_demo_patient(patient_id: str) -> Optional[dict]:
+    _refresh_custom_patients_from_disk()
     return next((patient for patient in _DEMO_PATIENTS if patient["patient_id"] == patient_id), None)
 
 
@@ -3149,6 +3267,10 @@ _DEMO_SCAN_SOURCE_GLOBS = {
         "data/samples/ds000105/**/func/*bold.nii.gz",
         "data/raw/uploads/brainscape_sample_fmri.nii.gz",
         "data/raw/uploads/*fmri*.nii.gz",
+    ],
+    "taitil-perfect-20260419": [
+        "data/raw/uploads/brainscape_sample_fmri.nii.gz",
+        "data/samples/ds000105/**/anat/*T1w.nii.gz",
     ],
 }
 
@@ -3731,6 +3853,21 @@ def _ensure_demo_mesh(
     mesh_dir = _OUTPUTS_DIR / "demo_mesh" / scan_id
     mesh_dir.mkdir(parents=True, exist_ok=True)
     mesh_path = mesh_dir / f"{output_prefix}_web.obj"
+    
+    # Showcase-specific override: Use the high-fidelity fsaverage mesh for Taitil
+    if scan_id == "taitil-perfect-20260419":
+        # Check for multiple possible filenames I just exported
+        for candidate in [f"{output_prefix}_web.obj", "brain_xq_v2_web.obj", "brain_web.obj", "brain.obj"]:
+            if (mesh_dir / candidate).exists():
+                return {
+                    "mesh_url": f"/outputs/demo_mesh/{scan_id}/{candidate}",
+                    "mesh_format": "obj",
+                    "cached": True,
+                    "mesh_path": str(mesh_dir / candidate),
+                    "modality": modality,
+                    "mesh_quality": "extreme",
+                    "synthetic_fallback": False,
+                }
 
     if mesh_path.exists() and not force_rebuild:
         runtime_context = _RUNTIME_CONTEXT_STORE.get(scan_id, {})
@@ -3927,6 +4064,7 @@ async def get_demo_patients():
 @app.get("/patients")
 async def list_patients(current_user: dict = Depends(get_current_user)):
     """Return all known patients (demo + custom) for frontend worklist rendering."""
+    _refresh_custom_patients_from_disk()
     audit.log(
         user_id=current_user.get("sub", ""),
         role=current_user.get("role", ""),
@@ -4003,6 +4141,7 @@ async def get_patient_record(
     current_user: dict = Depends(get_current_user),
 ):
     """Return one patient record with latest analysis and timeline context."""
+    _refresh_custom_patients_from_disk()
     patient = _find_demo_patient(patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail=f"Unknown patient_id: {patient_id}")
@@ -5040,7 +5179,8 @@ async def shutdown():
 def main():
     """Run the API server."""
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, workers=2)
+    # Removed workers=2 to allow running via 'python api.py'
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 
 
 if __name__ == "__main__":

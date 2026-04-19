@@ -43,11 +43,11 @@
 <text x="880" y="517" class="value">1.06</text>
 <rect x="70" y="536" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
 <text x="90" y="569" class="label">Mean flagged volume (mm3)</text>
-<text x="880" y="569" class="value">6939.2</text>
+<text x="880" y="569" class="value">6129.5</text>
 <rect x="70" y="588" width="960" height="52" fill="#FFFFFF" stroke="#D0D7E2"/>
 <text x="90" y="621" class="label">Mean severe volume (mm3)</text>
-<text x="880" y="621" class="value">3113.6</text>
+<text x="880" y="621" class="value">2555.4</text>
 <rect x="70" y="640" width="960" height="52" fill="#F3F8FD" stroke="#D0D7E2"/>
 <text x="90" y="673" class="label">Mean highest regional burden (%)</text>
-<text x="880" y="673" class="value">25.39</text>
+<text x="880" y="673" class="value">22.54</text>
 </svg>
