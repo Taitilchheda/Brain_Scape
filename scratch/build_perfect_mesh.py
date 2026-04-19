@@ -32,14 +32,12 @@ maxs = np.max(all_coords, axis=0)
 center = (mins + maxs) / 2.0
 all_coords -= center
 
-# APPLY ROTATION TO ALIGN WITH VOLUME (fixing perpendicular orientation)
-# We swap Y and Z to match typical Three.js vs MNI coordinate systems if they are perpendicular
-# Based on 'perpendicular' feedback, we'll try a 90-degree rotate on X
-# x, y, z -> x, -z, y
+# User Feedback: "rotate everything 90 deg on xy plane" (Z-axis rotation)
+# x, y, z -> -y, x, z
 rotated_coords = np.zeros_like(all_coords)
-rotated_coords[:, 0] = all_coords[:, 0]
-rotated_coords[:, 1] = -all_coords[:, 2] # New Y is -Old Z
-rotated_coords[:, 2] = all_coords[:, 1]  # New Z is Old Y
+rotated_coords[:, 0] = -all_coords[:, 1]
+rotated_coords[:, 1] = all_coords[:, 0]
+rotated_coords[:, 2] = all_coords[:, 2]
 
 # Re-center and scale
 extent = np.max(np.max(rotated_coords, axis=0) - np.min(rotated_coords, axis=0))
@@ -55,4 +53,4 @@ for d in [export_dir, demo_dir]:
     mesh.export(os.path.join(d, "brain_hq_v2_web.obj"), file_type="obj")
     mesh.export(os.path.join(d, "brain_xq_v2_web.obj"), file_type="obj")
 
-print("Done exporting with fixed orientation!")
+print("Done exporting with XY plane rotation!")
