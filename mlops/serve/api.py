@@ -2226,127 +2226,176 @@ def _ensure_report_pdf(
     critical_findings: list[dict[str, Any]],
 ) -> Path:
     pdf_path = _report_pdf_path(scan_id, mode)
-    # Force regeneration for demo scans to reflect dynamic edits (high-risk, etc)
+    # Force regeneration for demo scans to reflect dynamic edits
     if pdf_path.exists() and scan_id not in _DEMO_ANALYSES:
         return pdf_path
-
-    title = f"Brain_Scape Neurology Report ({mode.title()} Mode)"
 
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.units import inch
 
         doc = SimpleDocTemplate(
             str(pdf_path),
             pagesize=A4,
-            leftMargin=32,
-            rightMargin=32,
-            topMargin=34,
-            bottomMargin=34,
+            leftMargin=0.5*inch,
+            rightMargin=0.5*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch,
         )
         styles = getSampleStyleSheet()
+        
+        # Define Custom Styles
+        title_style = ParagraphStyle(
+            'ClinicalTitle',
+            parent=styles['Title'],
+            fontSize=22,
+            spaceAfter=12,
+            textColor=colors.HexColor("#1a365d")
+        )
+        h2_style = ParagraphStyle(
+            'ClinicalH2',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.HexColor("#2b6cb0"),
+            spaceBefore=15,
+            spaceAfter=8,
+            borderPadding=2,
+            borderWidth=0,
+            borderColor=colors.HexColor("#cbd5e0")
+        )
+        h3_style = ParagraphStyle(
+            'ClinicalH3',
+            parent=styles['Heading3'],
+            fontSize=12,
+            textColor=colors.HexColor("#4a5568"),
+            spaceBefore=10,
+            spaceAfter=5
+        )
+        
         elements: list[Any] = []
 
-        elements.append(Paragraph(title, styles["Title"]))
-        
-        # High Risk Banner
-        if str(quantitative_metrics.get("risk_band", "")).lower() == "high":
-            banner_style = getSampleStyleSheet()["Normal"]
-            banner_style.backColor = colors.red
-            banner_style.textColor = colors.white
-            banner_style.alignment = 1 # Center
-            elements.append(Paragraph("<br/><b>CRITICAL: HIGH RISK NEUROLOGIC PATTERN DETECTED</b><br/>", banner_style))
-            elements.append(Spacer(1, 10))
+        # ── Header Section ──
+        header_data = [[
+            Paragraph("<b>Brain_Scape</b><br/><font size=9>Neuroimaging Intelligence</font>", styles["Normal"]),
+            Paragraph("<b>Clinical Neuro-Diagnostics Report</b>", title_style)
+        ]]
+        header_table = Table(header_data, colWidths=[2*inch, 5*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LINEBELOW', (0, 0), (-1, -1), 1, colors.HexColor("#1e3a8a")),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 10))
 
-        elements.append(Paragraph(f"Patient Name: {analysis.get('patient_name', 'Taitil Chheda')}", styles["Heading3"]))
-        elements.append(Paragraph(f"Patient ID: {analysis.get('patient_code', 'BS-999')} | Age: {analysis.get('age', '42')} | Sex: {analysis.get('sex', 'M')}", styles["Normal"]))
-        elements.append(Paragraph(f"Scan ID: {scan_id} | Modality: {', '.join(analysis.get('modalities', ['MRI_T1']))}", styles["Normal"]))
-        elements.append(Paragraph(f"Study Date: {analysis.get('study_date', '2026-04-19')} | Report Generated: {_now_iso()}", styles["Normal"]))
+        # ── High Risk Banner ──
+        risk_band = str(quantitative_metrics.get("risk_band", "")).upper()
+        if risk_band == "HIGH":
+            banner_style = ParagraphStyle(
+                'RiskBanner',
+                parent=styles['Normal'],
+                backColor=colors.HexColor("#f87171"),
+                textColor=colors.white,
+                alignment=1,
+                fontSize=14,
+                leading=18,
+                borderPadding=5
+            )
+            elements.append(Paragraph("<b>CRITICAL ALERT: HIGH RISK NEUROLOGIC PATTERN DETECTED</b>", banner_style))
+            elements.append(Spacer(1, 12))
+
+        # ── Patient/Scan Meta Table ──
+        meta_data = [
+            ["Patient Name:", analysis.get('patient_name', 'Unknown'), "Scan ID:", scan_id],
+            ["Patient ID:", analysis.get('patient_code', 'N/A'), "Modality:", ", ".join(analysis.get('modalities', ['MRI']))],
+            ["Age / Sex:", f"{analysis.get('age', 'N/A')} / {analysis.get('sex', 'N/A')}", "Study Date:", analysis.get('study_date', 'N/A')],
+            ["Gen. Date:", _now_iso(), "Triage Score:", str(quantitative_metrics.get("triage_score", "N/A"))]
+        ]
+        meta_table = Table(meta_data, colWidths=[1.2*inch, 2.5*inch, 1.2*inch, 2.6*inch])
+        meta_table.setStyle(TableStyle([
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold', 0, -1),
+            ('FONTNAME', (1,0), (1,-1), 'Helvetica'),
+            ('FONTNAME', (3,0), (3,-1), 'Helvetica'),
+            ('BACKGROUND', (0,0), (0,-1), colors.HexColor("#f1f5f9")),
+            ('BACKGROUND', (2,0), (2,-1), colors.HexColor("#f1f5f9")),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        elements.append(meta_table)
         elements.append(Spacer(1, 15))
 
-        elements.append(Paragraph("Summary", styles["Heading2"]))
-        elements.append(Paragraph(str(report_sections.get("summary", "n/a")), styles["Normal"]))
-        elements.append(Paragraph(str(report_mode_notice), styles["Normal"]))
-        elements.append(Spacer(1, 10))
+        # ── Executive Summary ──
+        elements.append(Paragraph("I. Clinical Executive Summary", h2_style))
+        elements.append(Paragraph(str(report_sections.get("summary", "No summary available.")), styles["Normal"]))
+        elements.append(Paragraph(f"<i>Note: {report_mode_notice}</i>", styles["Italic"]))
+        elements.append(Spacer(1, 12))
 
-        metrics_table_data = [
-            ["Risk band", str(quantitative_metrics.get("risk_band", "unknown"))],
-            ["Triage score", str(quantitative_metrics.get("triage_score", "n/a"))],
-            ["Overall confidence (%)", str(quantitative_metrics.get("overall_confidence_pct", "n/a"))],
-            ["Flagged regions", str(quantitative_metrics.get("flagged_regions", "n/a"))],
-            ["Severe regions", str(quantitative_metrics.get("severe_regions", "n/a"))],
-            ["Largest region", str(quantitative_metrics.get("largest_region_name", "n/a"))],
-            ["Largest region volume (mm3)", str(quantitative_metrics.get("largest_region_volume_mm3", "n/a"))],
-        ]
-        elements.append(Paragraph("Quantitative Overview", styles["Heading2"]))
-        metrics_table = Table(metrics_table_data, colWidths=[220, 280])
-        metrics_table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9f3ff")),
-                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#c8d8ea")),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-                ]
-            )
-        )
-        elements.append(metrics_table)
-        elements.append(Spacer(1, 10))
+        # ── Impression ──
+        elements.append(Paragraph("II. Primary Neurologic Impression", h2_style))
+        elements.append(Paragraph(f"<b>Core Finding:</b> {report_sections.get('impression', 'No impression available.')}", styles["Normal"]))
+        elements.append(Paragraph(str(report_sections.get("risk_statement", "")), styles["Normal"]))
+        elements.append(Spacer(1, 15))
 
+        # ── Regional findings table ──
         if finding_rows:
-            elements.append(Paragraph("Top Regional Findings", styles["Heading2"]))
-            rows = [["Region", "Severity", "Confidence (%)", "Volume (mm3)"]]
-            for row in finding_rows[:12]:
+            elements.append(Paragraph("III. Regional Quantitative Analysis", h2_style))
+            rows = [["Anatomical Region", "Severity", "Confidence", "Volume (mm³)"]]
+            for row in finding_rows[:15]:
+                sev = str(row.get("severity_label", "BLUE")).upper()
                 rows.append([
                     str(row.get("region", "Unknown")),
-                    str(row.get("severity_label", "UNKNOWN")),
-                    str(row.get("confidence_pct", "n/a")),
-                    str(row.get("volume_mm3", "n/a")),
+                    sev,
+                    f"{row.get('confidence_pct', 'N/A')}%",
+                    f"{row.get('volume_mm3', 'N/A')}",
                 ])
-            findings_table = Table(rows, repeatRows=1)
-            findings_table.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eff7ff")),
-                        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d5e2f1")),
-                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ]
-                )
-            )
-            elements.append(findings_table)
-            elements.append(Spacer(1, 10))
+            
+            table = Table(rows, colWidths=[2.8*inch, 1.2*inch, 1.2*inch, 2.3*inch], repeatRows=1)
+            t_style = TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e3a8a")),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e0")),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+            ])
+            # Stripe severity rows
+            for i, r in enumerate(rows):
+                if r[1] == "RED": t_style.add('BACKGROUND', (1,i), (1,i), colors.HexColor("#fee2e2"))
+                if r[1] == "ORANGE": t_style.add('BACKGROUND', (1,i), (1,i), colors.HexColor("#ffedd5"))
+            table.setStyle(t_style)
+            elements.append(table)
+            elements.append(Spacer(1, 15))
 
-        elements.append(Paragraph("Impression", styles["Heading2"]))
-        elements.append(Paragraph(str(report_sections.get("impression", "No impression available.")), styles["Normal"]))
-        elements.append(Paragraph(str(report_sections.get("risk_statement", "")), styles["Normal"]))
-        elements.append(Spacer(1, 8))
-
-        for line in neurology_standard_sections.get("recommended_actions", [])[:5]:
-            elements.append(Paragraph(f"- {line}", styles["Normal"]))
-
+        # ── Critical Findings ──
         if critical_findings:
-            elements.append(Spacer(1, 8))
-            elements.append(Paragraph("Critical Findings", styles["Heading2"]))
-            for item in critical_findings[:8]:
-                title_text = item.get("title") or item.get("category") or "Critical finding"
-                description = item.get("description") or ""
-                elements.append(Paragraph(f"- {title_text}: {description}", styles["Normal"]))
+            elements.append(Paragraph("IV. Identified Critical Findings", h2_style))
+            for item in critical_findings[:10]:
+                title = item.get("title") or item.get("category") or "Finding"
+                elements.append(Paragraph(f"<b>• {title}:</b> {item.get('description', '')}", styles["Normal"]))
+            elements.append(Spacer(1, 15))
+
+        # ── Recommendations ──
+        elements.append(Paragraph("V. Clinical Recommendations & Plan", h2_style))
+        rec_list = neurology_standard_sections.get("recommended_actions", [])
+        if not rec_list:
+            elements.append(Paragraph("No specific recommendations provided.", styles["Normal"]))
+        else:
+            for rec in rec_list[:8]:
+                elements.append(Paragraph(f"• {rec}", styles["Normal"]))
+        elements.append(Spacer(1, 20))
+
+        # ── Footer ──
+        elements.append(Spacer(1, 30))
+        footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey, alignment=1)
+        elements.append(Paragraph("BrainScape Analysis Platform — Clinical Confidential — Automated Quantitative Assessment", footer_style))
 
         doc.build(elements)
     except Exception as exc:
-        logger.warning(f"Report PDF generation fallback for {scan_id} ({mode}): {exc}")
-        fallback_lines = [
-            title,
-            f"Scan ID: {scan_id}",
-            f"Generated: {_now_iso()}",
-            f"Risk: {quantitative_metrics.get('risk_band', 'unknown')}",
-            f"Triage score: {quantitative_metrics.get('triage_score', 'n/a')}",
-            str(report_sections.get("impression", "No impression available.")),
-            str(report_sections.get("risk_statement", "")),
-        ]
-        _write_minimal_pdf(pdf_path, fallback_lines)
+        logger.exception(f"Professional PDF generation failed, using fallback: {exc}")
+        _write_minimal_pdf(pdf_path, [f"Error generating professional report: {exc}"])
 
     if not pdf_path.exists():
         _write_minimal_pdf(
